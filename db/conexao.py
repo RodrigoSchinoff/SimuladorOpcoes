@@ -1,13 +1,23 @@
 import psycopg2
 
-
 def conectar():
-    return psycopg2.connect(
-        host="db.uqyofheglfryfwpyaqis.supabase.co",
-        port=5432,
-        dbname="postgres",
-        user="postgres",
-        password="AatR1701"
-    )
+    HOST = "aws-1-sa-east-1.pooler.supabase.com"   # Host do Pooler
+    PORT = 6543                                    # Porta do Pooler
+    DB   = "postgres"                              # Nome do banco
+    USER = "postgres.uqyofheglfryfwpyaqis"         # Usuário do Pooler
+    PASS = "AatR1701"                 # Sua senha (reset em Settings → Database se não lembrar)
 
-postgresql://postgres:[YOUR-PASSWORD]@db.uqyofheglfryfwpyaqis.supabase.co:5432/postgres
+    try:
+        conn = psycopg2.connect(
+            host=HOST,
+            port=PORT,
+            dbname=DB,
+            user=USER,
+            password=PASS,
+            sslmode="require"   # Supabase exige SSL
+        )
+        print("✅ Conexão estabelecida com sucesso.")
+        return conn
+    except Exception as e:
+        print("❌ Erro ao conectar ao banco de dados:", e)
+        return None
