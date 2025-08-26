@@ -180,6 +180,20 @@ def build_screener_panel(page):
         page.update()
 
     tf_venc = ft.TextField(label="Vencimento", width=220, read_only=True, hint_text="YYYY-MM-DD")
+    _H = 48
+    _PAD = ft.padding.only(left=12, right=12, top=12, bottom=12)
+
+    #tkr = ft.TextField(label="Ticker (ex.: CMIG4)", width=220, height=_H, content_padding=_PAD)
+
+    tf_venc = ft.TextField(
+        label="Vencimento",
+        width=220,
+        height=_H,
+        content_padding=_PAD,
+        read_only=True,
+        hint_text="YYYY-MM-DD",
+    )
+
 
     def abrir_calendario(_):
         print("[screener] abrir_calendario()", flush=True)
@@ -229,6 +243,7 @@ def build_screener_panel(page):
         rows=[],
         column_spacing=12,
     )
+    table.visible = False
 
     def on_screener(_):
         try:
@@ -247,6 +262,8 @@ def build_screener_panel(page):
 
             status.value = "Rodando..."
             output.visible = False
+            table.rows = []
+            table.visible = False
             page.update()
 
             buckets = atualizar_e_screener_ls(t, d)
@@ -289,19 +306,20 @@ def build_screener_panel(page):
                         # se um item vier torto, coloca uma linha de erro e segue
                         rows.append(ft.DataRow(cells=[cell(f"[erro: {e}]"), *[cell("") for _ in range(9)]]))
 
-            if total == 0:
-                # nenhuma linha -> mostra aviso no output
+            if total > 0:
+                table.rows = rows
+                table.visible = True  # ⬅️ mostra a tabela
+                output.visible = False
+                status.value = f"OK ({total} itens)"
+            else:
                 table.rows = []
-                status.value = "OK (0 itens)"
-                output.value = f"{t} / {d}\n\nNenhum par encontrado para os critérios informados."
+                table.visible = False  # ⬅️ esconde tabela
+                output.value = f"{t} / {d}\n\nNenhum par encontrado."
                 output.visible = True
-                page.update()
-                return
+                status.value = "OK (0 itens)"
 
-            # preenche tabela
-            table.rows = rows
-            status.value = f"OK ({total} itens)"
             page.update()
+
 
         except Exception as ex:
             # exibe erro visível na tela
@@ -313,6 +331,7 @@ def build_screener_panel(page):
                 output.value = f"❌ Erro ao executar o screener:\n{ex}"
             output.visible = True
             table.rows = []
+            table.visible = False
             page.update()
 
     #btn_screener = ft.FilledButton("Selecionar data", icon="event", on_click=abrir_calendario)
@@ -331,8 +350,8 @@ def build_screener_panel(page):
                 ft.Divider(),
                 ft.Text("Resultado"),
                 # >>> ADIÇÃO: exibição do resultado
-                table,
-                output,
+                table,  # aparece só com dados
+                output,  # aparece só p/ mensagens
             ],
             spacing=14
         ),
