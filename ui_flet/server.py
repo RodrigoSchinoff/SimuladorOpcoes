@@ -1,7 +1,7 @@
 # ui_flet/server.py
 import os
 import flet as ft
-from .app_ls import main as app_main   # import relativo
+from .app_ls import main as app_main
 
 if __name__ == "__main__":
     host = os.environ.get("FLET_SERVER_IP", "0.0.0.0")
