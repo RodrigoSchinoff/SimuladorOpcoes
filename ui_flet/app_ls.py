@@ -105,6 +105,10 @@ def build_simulador_panel(page):
     dd_put  = ft.Dropdown(label="PUT",  options=[ft.dropdown.Option(v) for v in PUTS_FIXAS],
                           value=PUTS_FIXAS[0], width=280)
 
+    # [PATCH-1] tornar acessíveis a partir de outras partes da app
+    page.sim_dd_call = dd_call
+    page.sim_dd_put = dd_put
+
     status_txt = ft.Text("", size=12)
     chart_container = ft.Container(width=700, height=380, padding=10, border_radius=12)
 
@@ -150,6 +154,11 @@ def build_simulador_panel(page):
 
     # botão ABAIXO dos campos
     btn_simular = ft.FilledButton("Simular Long Straddle", icon="show_chart", on_click=on_simular)
+
+    page.sim_on_simular = on_simular  # permite disparar a simulação de fora
+    page.sim_dd_call = dd_call  # (se ainda não expôs)
+    page.sim_dd_put = dd_put
+
 
     return ft.Container(
         content=ft.Column(
@@ -242,8 +251,57 @@ def build_screener_panel(page):
         ],
         rows=[],
         column_spacing=12,
+
     )
     table.visible = False
+
+    # [PATCH-4] handler: carrega CALL/PUT da linha no simulador e troca de painel
+    def on_row_select(e, call_symbol, put_symbol):
+        try:
+            dd_call = getattr(page, "sim_dd_call", None)
+            dd_put = getattr(page, "sim_dd_put", None)
+            sim_fn = getattr(page, "sim_on_simular", None)  # <- handler do simulador, exposto no build_simulador_panel
+
+            if not (dd_call and dd_put):
+                show_snack(page, "Não encontrei os campos do simulador.")
+                return
+
+            # garante que os valores existam nas opções do Dropdown
+            def ensure_option(dd, val):
+                if not val:
+                    return
+                existing = []
+                for opt in dd.options:
+                    k = getattr(opt, "key", None)
+                    if k is None:
+                        k = getattr(opt, "text", None)
+                    existing.append(k)
+                if val not in existing:
+                    dd.options.append(ft.dropdown.Option(val))
+                dd.value = val
+                dd.update()
+
+            ensure_option(dd_call, call_symbol)
+            ensure_option(dd_put, put_symbol)
+
+            show_snack(page, f"CALL {call_symbol} e PUT {put_symbol} carregadas no simulador.")
+
+            # alterna para o painel do simulador (se exposto em page.go_simulador)
+            go_sim = getattr(page, "go_simulador", None)
+            if callable(go_sim):
+                go_sim(None)
+
+            # garante que a UI reflita os valores antes de simular
+            page.update()
+
+            # dispara a simulação automaticamente (se exposta em page.sim_on_simular)
+            if callable(sim_fn):
+                sim_fn(None)
+            else:
+                show_snack(page, "Clique em 'Simular Long Straddle' para rodar.")
+
+        except Exception as ex:
+            show_snack(page, f"Erro ao carregar no simulador: {ex}")
 
     def on_screener(_):
         try:
@@ -273,19 +331,23 @@ def build_screener_panel(page):
                 return ft.DataCell(ft.Text(str(txt)))
 
             def row(bucket_label, r):
+                call = r.get("call", "")
+                put = r.get("put", "")
                 return ft.DataRow(
                     cells=[
-                        cell(bucket_label),
-                        cell(r.get("call", "")),
-                        cell(r.get("put", "")),
-                        cell(f"{to_float(r.get('strike')):.2f}"),
-                        cell(fmt_pct(r.get("be_pct"))),
-                        cell(f"{to_float(r.get('be_down')):.2f}"),
-                        cell(f"{to_float(r.get('be_up')):.2f}"),
-                        cell(f"{to_float(r.get('spot')):.2f}"),
-                        cell(fmt_brl(r.get("premium_total") or 0)),
-                        cell(r.get("due_date", "")),
-                    ]
+                        ft.DataCell(ft.Text(bucket_label)),
+                        ft.DataCell(ft.Text(call)),
+                        ft.DataCell(ft.Text(put)),
+                        ft.DataCell(ft.Text(f"{to_float(r.get('strike')):.2f}")),
+                        ft.DataCell(ft.Text(fmt_pct(r.get("be_pct")))),
+                        ft.DataCell(ft.Text(f"{to_float(r.get('be_down')):.2f}")),
+                        ft.DataCell(ft.Text(f"{to_float(r.get('be_up')):.2f}")),
+                        ft.DataCell(ft.Text(f"{to_float(r.get('spot')):.2f}")),
+                        ft.DataCell(ft.Text(fmt_brl(r.get("premium_total") or 0))),
+                        ft.DataCell(ft.Text(r.get("due_date", ""))),
+                    ],
+                    # [PATCH-5] quando selecionar a linha, preenche o simulador
+                    on_select_changed=lambda e, c=call, p=put: on_row_select(e, c, p),
                 )
 
             grupos = [
@@ -369,7 +431,8 @@ def main(page):
 
     simulador_panel = build_simulador_panel(page)
     screener_panel  = build_screener_panel(page)
-    screener_panel.visible = False  # começa no simulador
+    #screener_panel.visible = False  # começa no simulador
+    simulador_panel.visible = False
 
     def show_simulador(_):
         print("[menu] Simulador", flush=True)
@@ -385,13 +448,14 @@ def main(page):
 
     menu = ft.Row(
         controls=[
-            ft.FilledTonalButton("Simulador", icon="show_chart", on_click=show_simulador),
             ft.FilledTonalButton("Screener",  icon="search",     on_click=show_screener),
+            ft.FilledTonalButton("Simulador", icon="show_chart", on_click=show_simulador),
+
         ],
         spacing=10
     )
 
-    page.add(menu, simulador_panel, screener_panel)
+    page.add(menu, screener_panel, simulador_panel)
 
 if __name__ == "__main__":
     ft.app(target=main)
