@@ -99,7 +99,7 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
         irate  = 0.0
         amount = int((c.get("contract_size") or p.get("contract_size") or 100) or 100)
 
-        # IV (se existir no JSON)
+        # --- helpers de IV e BS local (rápido) ---
         def _iv(o: dict) -> float:
             for k_iv in ("iv", "implied_vol", "implied_volatility", "sigma"):
                 try:
@@ -110,10 +110,23 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
                     pass
             return 0.0
 
+        from math import log, sqrt, erf
+        def _norm_cdf(x: float) -> float:
+            return 0.5 * (1.0 + erf(x / sqrt(2.0)))
+
+        def _bs_delta_local(spot_: float, strike_: float, dias_: int, vol_: float, r_: float, is_call: bool):
+            # usa ano de 252 dias úteis; ajuste para 365 se preferir
+            if spot_ <= 0 or strike_ <= 0 or vol_ <= 0 or dias_ <= 0:
+                return None
+            t = dias_ / 252.0
+            d1 = (log(spot_ / strike_) + (r_ + 0.5 * vol_ * vol_) * t) / (vol_ * sqrt(t))
+            nd1 = _norm_cdf(d1)
+            return nd1 if is_call else (nd1 - 1.0)
+
         vol_call = _iv(c)
         vol_put  = _iv(p)
 
-        # --- DELTA via cache/API (canonização + paralelismo) ---
+        # --- DELTA via cache/API (canonização + paralelismo + local-first) ---
         import concurrent.futures as cf
         from services.api_bs import bs_greeks
         from repositories.bs_repo import get_cached_bs, upsert_bs
@@ -126,7 +139,13 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
 
         spot_c = _canon(spot, 2)  # chave estável p/ cache
 
-        def _delta_from_api(o: dict, kind: str, vol_in: float, prem_in: float):
+        def _delta_for_leg(o: dict, kind: str, vol_in: float, prem_in: float):
+            # 0) tentativa local (se tivermos IV, é instantâneo)
+            d_local = _bs_delta_local(spot, float(o.get("strike") or 0), dias, vol_in, irate, kind == "CALL")
+            if d_local is not None:
+                return d_local
+
+            # 1) tenta cache (TTL 60 min) com chaves canonizadas
             params = dict(
                 symbol=o.get("symbol"),
                 due_date=due_date,
@@ -139,18 +158,17 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
                 irate=irate,
                 amount=amount,
             )
-
-            # 1) tenta cache (TTL 60 min)
             cached = get_cached_bs(**params, ttl_minutes=60)
             if cached and cached.get("delta") is not None:
                 try:
                     return float(cached["delta"])
                 except Exception:
-                    return None
+                    pass
 
             # 2) chama API (timeout curto) e grava com os mesmos valores canônicos
             try:
                 resp = bs_greeks(**params, timeout=3)
+                # alinhar valores retornados com a chave
                 resp["spotprice"] = params["spotprice"]
                 resp["strike"]    = params["strike"]
                 resp["premium"]   = params["premium"]
@@ -168,8 +186,8 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
 
         # paraleliza a obtenção dos deltas da CALL e da PUT
         with cf.ThreadPoolExecutor(max_workers=2) as ex:
-            f_c = ex.submit(_delta_from_api, c, "CALL", vol_call, prem_call)
-            f_p = ex.submit(_delta_from_api, p, "PUT",  vol_put,  prem_put)
+            f_c = ex.submit(_delta_for_leg, c, "CALL", vol_call, prem_call)
+            f_p = ex.submit(_delta_for_leg, p, "PUT",  vol_put,  prem_put)
             try:
                 d_call = f_c.result(timeout=5)
             except Exception:
