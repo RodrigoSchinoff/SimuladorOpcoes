@@ -100,7 +100,7 @@ def acao_screener_ls_venc():
     import os
     from datetime import datetime
 
-    t = input_ticker("Ticker (ex.: CMIG4): ")
+    t = input_ticker("Ticker (ex.: PETR4): ")
     d = input("Vencimento (YYYY-MM-DD): ").strip()
 
     # roda: atualiza DB via API e depois screener (lendo só do DB)

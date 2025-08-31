@@ -19,11 +19,10 @@ import traceback  # <-- ADICIONE ESTA LINHA
 
 from services.api import buscar_detalhes_opcao
 from simulacoes.long_straddle import simular_long_straddle
-from core.app_core import atualizar_e_screener_ls
-# from repositories.opcoes_repo import listar_vencimentos  # se quiser usar depois
+#from core.app_core import atualizar_e_screener_ls
+from core.app_core import atualizar_e_screener_ls, atualizar_e_screener_atm_2venc
 
-CALLS_FIXAS = ["CMIGI119"]
-PUTS_FIXAS  = ["CMIGU119"]
+# from repositories.opcoes_repo import listar_vencimentos  # se quiser usar depois
 
 # ---------------- Helpers ----------------
 def show_snack(page, msg: str):
@@ -100,14 +99,13 @@ def fmt_brl(x) -> str:
 
 # -------------- Painel: Simulador --------------
 def build_simulador_panel(page):
-    dd_call = ft.Dropdown(label="CALL", options=[ft.dropdown.Option(v) for v in CALLS_FIXAS],
-                          value=CALLS_FIXAS[0], width=280)
-    dd_put  = ft.Dropdown(label="PUT",  options=[ft.dropdown.Option(v) for v in PUTS_FIXAS],
-                          value=PUTS_FIXAS[0], width=280)
+    # Dropdowns SEM opções fixas; serão preenchidos pelo screener
+    dd_call = ft.Dropdown(label="CALL", options=[], value=None, width=280)
+    dd_put  = ft.Dropdown(label="PUT",  options=[], value=None, width=280)
 
-    # [PATCH-1] tornar acessíveis a partir de outras partes da app
+    # Expor referências para outras partes da app (screener usa isso)
     page.sim_dd_call = dd_call
-    page.sim_dd_put = dd_put
+    page.sim_dd_put  = dd_put
 
     status_txt = ft.Text("", size=12)
     chart_container = ft.Container(width=700, height=380, padding=10, border_radius=12)
@@ -116,7 +114,8 @@ def build_simulador_panel(page):
         call_symbol = dd_call.value
         put_symbol  = dd_put.value
         if not call_symbol or not put_symbol:
-            show_snack(page, "Selecione uma CALL e uma PUT."); return
+            show_snack(page, "Selecione uma CALL e uma PUT.")
+            return
 
         print("[simulador] clicou simular", flush=True)
         btn_simular.disabled = True
@@ -152,13 +151,11 @@ def build_simulador_panel(page):
             btn_simular.disabled = False
             page.update()
 
-    # botão ABAIXO dos campos
-    btn_simular = ft.FilledButton("Simular Long Straddle", icon="show_chart", on_click=on_simular)
+    # Botão começa desabilitado; o screener habilita quando preencher os dropdowns
+    btn_simular = ft.FilledButton("Simular Long Straddle", icon="show_chart", on_click=on_simular, disabled=True)
 
-    page.sim_on_simular = on_simular  # permite disparar a simulação de fora
-    page.sim_dd_call = dd_call  # (se ainda não expôs)
-    page.sim_dd_put = dd_put
-
+    # Expor o handler para ser chamado pelo screener (se você desejar auto-simular)
+    page.sim_on_simular = on_simular
 
     return ft.Container(
         content=ft.Column(
@@ -180,7 +177,7 @@ def build_simulador_panel(page):
 def build_screener_panel(page):
     from datetime import date
 
-    tkr = ft.TextField(label="Ticker (ex.: CMIG4)", width=220)
+    tkr = ft.TextField(label="Ticker (ex.: PETR4)", width=220)
 
     # DatePicker
     dp = ft.DatePicker(first_date=date(2020, 1, 1), last_date=date(2035, 12, 31))
@@ -192,7 +189,7 @@ def build_screener_panel(page):
     _H = 48
     _PAD = ft.padding.only(left=12, right=12, top=12, bottom=12)
 
-    #tkr = ft.TextField(label="Ticker (ex.: CMIG4)", width=220, height=_H, content_padding=_PAD)
+    #tkr = ft.TextField(label="Ticker (ex.: PETR4)", width=220, height=_H, content_padding=_PAD)
 
     tf_venc = ft.TextField(
         label="Vencimento",
@@ -201,6 +198,7 @@ def build_screener_panel(page):
         content_padding=_PAD,
         read_only=True,
         hint_text="YYYY-MM-DD",
+        visible=False
     )
 
 
@@ -238,7 +236,7 @@ def build_screener_panel(page):
 
     table = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("Bucket")),
+            ft.DataColumn(ft.Text("Moneyness")),
             ft.DataColumn(ft.Text("CALL")),
             ft.DataColumn(ft.Text("PUT")),
             ft.DataColumn(ft.Text("Strike")),
@@ -246,8 +244,16 @@ def build_screener_panel(page):
             ft.DataColumn(ft.Text("BE↓")),
             ft.DataColumn(ft.Text("BE↑")),
             ft.DataColumn(ft.Text("Spot")),
-            ft.DataColumn(ft.Text("Prêmio")),
-            ft.DataColumn(ft.Text("Venc.")),
+            ft.DataColumn(ft.Text("Prêmio Total")),
+
+            # --- NOVAS COLUNAS ---
+            ft.DataColumn(ft.Text("Prêmio CALL")),
+            ft.DataColumn(ft.Text("Δ CALL")),
+            ft.DataColumn(ft.Text("Prêmio PUT")),
+            ft.DataColumn(ft.Text("Δ PUT")),
+            # ----------------------
+
+            ft.DataColumn(ft.Text("Vencimento")),
         ],
         rows=[],
         column_spacing=12,
@@ -306,94 +312,127 @@ def build_screener_panel(page):
     def on_screener(_):
         try:
             t = (tkr.value or "").strip().upper()
-            d = (tf_venc.value or "").strip()
-            print(f"[screener] Rodar screener: t={t} d={d}", flush=True)
+            print(f"[screener] Rodar screener ATM (2 vencimentos): t={t}", flush=True)
 
-            # validação de campos
-            if not t or not d:
-                status.value = "Preencha Ticker e Vencimento."
-                output.value = "⚠️ Informe Ticker e Vencimento e clique em Rodar."
+            if not t:
+                status.value = "Informe o Ticker."
+                output.value = "⚠️ Informe o Ticker e clique em Rodar."
                 output.visible = True
-                table.rows = []  # limpa tabela
+                table.rows = []
                 page.update()
                 return
 
+            # helpers locais (padrão BR: vírgula como separador decimal)
+            def _to_f(v):
+                try:
+                    return float(v)
+                except Exception:
+                    return 0.0
+
+            def _fmt2(v):  # 2 casas, decimal com vírgula
+                return f"{_to_f(v):.2f}".replace(".", ",")
+
+            def _fmt4(v):  # 4 casas, decimal com vírgula
+                return f"{_to_f(v):.4f}".replace(".", ",")
+
+            def _fmt_pct(v):  # percentual com vírgula
+                try:
+                    return f"{float(v):.2f}%".replace(".", ",")
+                except Exception:
+                    return ""
+
             status.value = "Rodando..."
+            busy.visible = True
             output.visible = False
             table.rows = []
-            table.visible = False
             page.update()
 
-            buckets = atualizar_e_screener_ls(t, d)
+            # NOVO: screener ATM (2 próximos vencimentos)
+            res = atualizar_e_screener_atm_2venc(t)
+            linhas = (res or {}).get("atm", [])
+            if not linhas:
+                output.value = "Nenhuma linha ATM encontrada."
+                output.visible = True
+                busy.visible = False
+                status.value = ""
+                page.update()
+                return
 
-            # helper pra linha segura
-            def cell(txt):
-                return ft.DataCell(ft.Text(str(txt)))
-
-            def row(bucket_label, r):
+            def make_row(r):
                 call = r.get("call", "")
                 put = r.get("put", "")
+
+                # helpers com vírgula como separador decimal
+                def _to_f(v):
+                    try:
+                        return float(v)
+                    except Exception:
+                        return 0.0
+
+                def _fmt2(v):  # 2 casas, usa vírgula
+                    return f"{_to_f(v):.2f}".replace(".", ",")
+
+                def _fmt4(v):  # 4 casas, usa vírgula
+                    return f"{_to_f(v):.4f}".replace(".", ",")
+
+                def _fmt_pct(v):  # percentual com vírgula
+                    try:
+                        return f"{float(v):.2f}".replace(".", ",") + "%"
+                    except Exception:
+                        return ""
+
                 return ft.DataRow(
                     cells=[
-                        ft.DataCell(ft.Text(bucket_label)),
-                        ft.DataCell(ft.Text(call)),
-                        ft.DataCell(ft.Text(put)),
-                        ft.DataCell(ft.Text(f"{to_float(r.get('strike')):.2f}")),
-                        ft.DataCell(ft.Text(fmt_pct(r.get("be_pct")))),
-                        ft.DataCell(ft.Text(f"{to_float(r.get('be_down')):.2f}")),
-                        ft.DataCell(ft.Text(f"{to_float(r.get('be_up')):.2f}")),
-                        ft.DataCell(ft.Text(f"{to_float(r.get('spot')):.2f}")),
-                        ft.DataCell(ft.Text(fmt_brl(r.get("premium_total") or 0))),
-                        ft.DataCell(ft.Text(r.get("due_date", ""))),
+                        ft.DataCell(ft.Text("ATM")),  # Bucket
+                        ft.DataCell(ft.Text(call)),  # CALL
+                        ft.DataCell(ft.Text(put)),  # PUT
+                        ft.DataCell(ft.Text(_fmt2(r.get("strike")))),  # Strike (R$)
+                        ft.DataCell(ft.Text(_fmt_pct(r.get("be_pct")))),  # BE%
+                        ft.DataCell(ft.Text(_fmt2(r.get("be_down")))),  # BE↓ (R$)
+                        ft.DataCell(ft.Text(_fmt2(r.get("be_up")))),  # BE↑ (R$)
+                        ft.DataCell(ft.Text(_fmt2(r.get("spot")))),  # Spot (R$)
+                        ft.DataCell(ft.Text(_fmt4(r.get("premium_total")))),  # Prêmio Total (R$)
+
+                        # Novas colunas (também com vírgula)
+                        ft.DataCell(ft.Text(_fmt4(r.get("call_premio")))),  # Prêmio CALL (R$)
+                        ft.DataCell(ft.Text(_fmt4(r.get("call_delta")) if r.get("call_delta") is not None else "")),
+                        # Δ CALL
+                        ft.DataCell(ft.Text(_fmt4(r.get("put_premio")))),  # Prêmio PUT (R$)
+                        ft.DataCell(ft.Text(_fmt4(r.get("put_delta")) if r.get("put_delta") is not None else "")),
+                        # Δ PUT
+
+                        ft.DataCell(ft.Text(r.get("due_date", ""))),  # Vencimento
                     ],
-                    # [PATCH-5] quando selecionar a linha, preenche o simulador
                     on_select_changed=lambda e, c=call, p=put: on_row_select(e, c, p),
                 )
 
-            grupos = [
-                ("BE ≤ 3,00%", "lt_3"),
-                ("3,01% ≤ BE ≤ 5,00%", "btw_3_5"),
-                ("BE > 5,00%", "gt_5"),
-            ]
+            table.rows = [make_row(r) for r in linhas]
+            table.visible = True
 
-            rows = []
-            total = 0
-            for label, chave in grupos:
-                itens = buckets.get(chave, []) or []
-                total += len(itens)
-                for r in itens[:200]:
-                    try:
-                        rows.append(row(label, r))
-                    except Exception as e:
-                        # se um item vier torto, coloca uma linha de erro e segue
-                        rows.append(ft.DataRow(cells=[cell(f"[erro: {e}]"), *[cell("") for _ in range(9)]]))
+            # Preencher dropdowns com as opções retornadas pelo screener (sem fixos)
+            calls_opts = sorted({r["call"] for r in linhas if r.get("call")})
+            puts_opts = sorted({r["put"] for r in linhas if r.get("put")})
 
-            if total > 0:
-                table.rows = rows
-                table.visible = True  # ⬅️ mostra a tabela
-                output.visible = False
-                status.value = f"OK ({total} itens)"
-            else:
-                table.rows = []
-                table.visible = False  # ⬅️ esconde tabela
-                output.value = f"{t} / {d}\n\nNenhum par encontrado."
-                output.visible = True
-                status.value = "OK (0 itens)"
+            page.sim_dd_call.options = [ft.dropdown.Option(s) for s in calls_opts]
+            page.sim_dd_put.options = [ft.dropdown.Option(s) for s in puts_opts]
 
+            # (opcional) selecionar a primeira combinação como padrão
+            # if calls_opts and puts_opts:
+            #     page.sim_dd_call.value = calls_opts[0]
+            #     page.sim_dd_put.value  = puts_opts[0]
+
+            btn_simular.disabled = False
+            dropdowns_enable(True)
+
+            busy.visible = False
+            status.value = f"{len(linhas)} linhas ATM (2 vencimentos)."
             page.update()
 
 
         except Exception as ex:
-            # exibe erro visível na tela
-            status.value = "Falhou"
-            try:
-                import traceback
-                output.value = f"❌ Erro ao executar o screener:\n{ex}\n\n{traceback.format_exc()}"
-            except Exception:
-                output.value = f"❌ Erro ao executar o screener:\n{ex}"
-            output.visible = True
-            table.rows = []
-            table.visible = False
+            busy.visible = False
+            status.value = ""
+            show_snack(page, f"Erro no screener ATM: {ex}")
             page.update()
 
     #btn_screener = ft.FilledButton("Selecionar data", icon="event", on_click=abrir_calendario)
@@ -403,7 +442,7 @@ def build_screener_panel(page):
         content=ft.Column(
             [
                 ft.Text("Screener de Long Straddle", size=18),
-                ft.Text("Informe Ticker e Vencimento (calendário) para listar pares CALL/PUT.", size=12),
+                ft.Text("Informe Ticker para listar pares CALL/PUT.", size=12),
                 ft.Row([tkr, tf_venc], spacing=10),           # ambos 220px
                 #ft.Row([btn_screener, btn_rodar], spacing=10),
                 ft.Row([btn_rodar], spacing=10),
