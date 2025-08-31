@@ -89,16 +89,17 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
         if not c or not p:
             continue
 
-        # ---------------- NOVO BLOCO (prêmio por perna + delta via API BS) ----------------
+        # ----- prêmio por perna -----
         prem_call = _prem(c)
         prem_put  = _prem(p)
         prem = prem_call + prem_put
 
-        # parâmetros para BS
+        # params comuns
         dias   = int(c.get("days_to_maturity") or p.get("days_to_maturity") or 0)
         irate  = 0.0
         amount = int((c.get("contract_size") or p.get("contract_size") or 100) or 100)
 
+        # IV (se existir no JSON)
         def _iv(o: dict) -> float:
             for k_iv in ("iv", "implied_vol", "implied_volatility", "sigma"):
                 try:
@@ -112,20 +113,29 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
         vol_call = _iv(c)
         vol_put  = _iv(p)
 
-        # usa cache + API
+        # --- DELTA via cache/API (canonização + paralelismo) ---
+        import concurrent.futures as cf
         from services.api_bs import bs_greeks
         from repositories.bs_repo import get_cached_bs, upsert_bs
+
+        def _canon(v, nd):
+            try:
+                return round(float(v), nd)
+            except Exception:
+                return None
+
+        spot_c = _canon(spot, 2)  # chave estável p/ cache
 
         def _delta_from_api(o: dict, kind: str, vol_in: float, prem_in: float):
             params = dict(
                 symbol=o.get("symbol"),
                 due_date=due_date,
-                kind=kind,                     # "CALL" ou "PUT"
-                spotprice=spot,
-                strike=float(o.get("strike") or 0),
-                premium=prem_in,
-                dtm=dias,
-                vol=vol_in,
+                kind=kind,                       # "CALL" | "PUT"
+                spotprice=_canon(spot_c, 2),
+                strike=_canon(o.get("strike"), 2),
+                premium=_canon(prem_in, 4),
+                dtm=int(dias),
+                vol=_canon(vol_in, 4),
                 irate=irate,
                 amount=amount,
             )
@@ -136,11 +146,16 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
                 try:
                     return float(cached["delta"])
                 except Exception:
-                    pass
+                    return None
 
-            # 2) chama API e grava
+            # 2) chama API (timeout curto) e grava com os mesmos valores canônicos
             try:
-                resp = bs_greeks(**params)
+                resp = bs_greeks(**params, timeout=3)
+                resp["spotprice"] = params["spotprice"]
+                resp["strike"]    = params["strike"]
+                resp["premium"]   = params["premium"]
+                resp["vol"]       = params["vol"]
+                resp["dtm"]       = params["dtm"]
                 upsert_bs(
                     resp=resp,
                     symbol=params["symbol"], due_date=params["due_date"], kind=params["kind"],
@@ -151,9 +166,19 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
             except Exception:
                 return None
 
-        d_call = _delta_from_api(c, "CALL", vol_call, prem_call)
-        d_put  = _delta_from_api(p, "PUT",  vol_put,  prem_put)
-        # ---------------- FIM DO NOVO BLOCO ----------------
+        # paraleliza a obtenção dos deltas da CALL e da PUT
+        with cf.ThreadPoolExecutor(max_workers=2) as ex:
+            f_c = ex.submit(_delta_from_api, c, "CALL", vol_call, prem_call)
+            f_p = ex.submit(_delta_from_api, p, "PUT",  vol_put,  prem_put)
+            try:
+                d_call = f_c.result(timeout=5)
+            except Exception:
+                d_call = None
+            try:
+                d_put  = f_p.result(timeout=5)
+            except Exception:
+                d_put = None
+        # --- FIM BLOCO DELTA ---
 
         csz = amount
         be_d = round(k - prem, 2)
@@ -168,13 +193,11 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
             "strike": float(k),
             "spot": spot,
 
-            # totais/padrões já existentes
             "premium_total": round(prem, 4),
             "premium_contrato": round(prem * csz, 2),
             "contract_size": csz,
             "be_down": be_d, "be_up": be_u, "be_pct": be_pct,
 
-            # NOVO: prêmio e delta por perna
             "call_premio": round(prem_call, 4),
             "put_premio":  round(prem_put,  4),
             "call_delta":  None if d_call is None else round(d_call, 4),

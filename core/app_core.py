@@ -9,10 +9,11 @@ def atualizar_e_screener_ls(ticker: str, due_date: str) -> dict:
     return screener_ls_por_ticker_vencimento(ticker, due_date)
 
 # --- [ATM] Screener 2 próximos vencimentos (terceira sexta) ---
-def atualizar_e_screener_atm_2venc(ticker: str) -> dict:
+def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
     from datetime import date
     import calendar
     from simulacoes.atm_screener import screener_atm_dois_vencimentos
+    # se precisar: from core.app_core import inserir_opcoes_do_ativo
 
     def _third_friday(d: date) -> date:
         c = calendar.Calendar(firstweekday=calendar.MONDAY)
@@ -30,12 +31,12 @@ def atualizar_e_screener_atm_2venc(ticker: str) -> dict:
         y2, m2 = (first.year + (1 if first.month == 12 else 0), 1 if first.month == 12 else first.month + 1)
         ds = [first.strftime("%Y-%m-%d"), _third_friday(date(y2, m2, 1)).strftime("%Y-%m-%d")]
 
-    # atualiza o DB para os dois vencimentos (UPSERT por symbol)
-    for d in ds:
-        try:
-            inserir_opcoes_do_ativo(ticker, so_vencimento=d)
-        except Exception:
-            # se falhar a atualização de um vencimento, segue com o outro
-            pass
+    # ⚠️ Só atualiza o DB se explicitamente pedido (refresh=True)
+    if refresh:
+        for d in ds:
+            try:
+                inserir_opcoes_do_ativo(ticker, so_vencimento=d)
+            except Exception:
+                pass
 
     return screener_atm_dois_vencimentos(ticker, hoje)

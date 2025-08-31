@@ -34,6 +34,6 @@ def bs_greeks(
         "duedate": due_date,
         "amount": amount,
     }
-    r = requests.get(BASE_URL, params=params, headers=_get_headers(), timeout=timeout)
+    r = requests.get(BASE_URL, params=params, headers=_get_headers(), timeout=timeout or 3)
     r.raise_for_status()
     return r.json()
