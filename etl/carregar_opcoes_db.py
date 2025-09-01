@@ -32,16 +32,22 @@ def _to_list(json_result: Any) -> List[Dict[str, Any]]:
 
 def inserir_opcoes_do_ativo(ativo_base: str, so_vencimento: Optional[str] = None) -> int:
     """
-    Busca opções na API para 'ativo_base' e faz UPSERT na tabela (ON CONFLICT(symbol) DO UPDATE).
-    - Se 'so_vencimento' for informado, filtra aquele due_date.
-    - Preenche parent_symbol com 'ativo_base' quando vier ausente/NULL no JSON.
+    Busca opções na API para 'ativo_base' e faz UPSERT na tabela public.opcoes_do_ativo.
+    Regras:
+      - Mantém os timestamps do PROVEDOR (JSON): created_at / updated_at (se existirem no JSON e na tabela).
+      - Controla frescor por coluna PRÓPRIA: data_ultima_consulta (server-side).
+          * INSERT: usa DEFAULT now() (coluna fica fora da lista do INSERT)
+          * UPDATE: força "data_ultima_consulta = NOW()" no DO UPDATE
+      - Chave de conflito: ("symbol").
+      - parent_symbol recebe ativo_base quando vier ausente/vazio no JSON.
     """
     ativo_norm = (ativo_base or "").upper().strip()
 
-    # 1) Busca dados na API
+    # 1) Busca dados na API (uma chamada única, todas as séries)
     dados = buscar_opcoes_ativo(ativo_norm)
     rows = _to_list(dados)
 
+    # (opcional) filtrar por vencimento específico
     if so_vencimento:
         rows = [r for r in rows if r.get("due_date") == so_vencimento]
 
@@ -51,16 +57,17 @@ def inserir_opcoes_do_ativo(ativo_base: str, so_vencimento: Optional[str] = None
     # 2) Colunas existentes na tabela
     colunas_tabela = _colunas_da_tabela()
 
-    # 3) Interseção: só chaves que existam como colunas
-    colunas_insert = [c for c in colunas_tabela if any(c in r for r in rows)]
+    # 3) Interseção: só colunas que EXISTEM NA TABELA e aparecem em PELO MENOS UM item do JSON
+    #    OBS: NÃO colocamos "data_ultima_consulta" aqui para o INSERT usar DEFAULT now() no servidor.
+    colunas_insert = [c for c in colunas_tabela if any(c in r for r in rows) and c != "data_ultima_consulta"]
 
-    # ⚠️ Garantir que 'symbol' (PK) e 'parent_symbol' entrem no INSERT
+    # 4) Garantias mínimas
     if "symbol" not in colunas_insert:
-        raise RuntimeError("A coluna 'symbol' (PK) precisa existir na tabela e no JSON.")
+        raise RuntimeError("A coluna 'symbol' (PK/UNIQUE) precisa existir na tabela e no JSON.")
     if "parent_symbol" in colunas_tabela and "parent_symbol" not in colunas_insert:
         colunas_insert.append("parent_symbol")
 
-    # 4) Montar valores respeitando a ordem das colunas
+    # 5) Montar valores (na ordem de colunas_insert)
     valores: List[Tuple] = []
     for r in rows:
         linha = []
@@ -73,17 +80,20 @@ def inserir_opcoes_do_ativo(ativo_base: str, so_vencimento: Optional[str] = None
             linha.append(v)
         valores.append(tuple(linha))
 
-    # 5) INSERT ... ON CONFLICT(symbol) DO UPDATE (UPSERT)
+    # 6) UPSERT: INSERT ... ON CONFLICT("symbol") DO UPDATE ...
     cols_sql = ", ".join([f'"{c}"' for c in colunas_insert])
 
+    # No DO UPDATE, atualizamos TODAS as colunas do INSERT (exceto symbol)
+    # e SEMPRE "data_ultima_consulta = NOW()" se a coluna existir na tabela.
     set_cols = [c for c in colunas_insert if c != "symbol"]
-    tem_updated_at = "updated_at" in colunas_tabela
-    updated_at_clause = '"updated_at" = NOW()' if tem_updated_at and "updated_at" not in set_cols else None
 
     if set_cols:
         set_list = [f'"{c}" = EXCLUDED."{c}"' for c in set_cols]
-        if updated_at_clause:
-            set_list.append(updated_at_clause)
+
+        # ✅ nossa coluna de frescor (server-side, independente do provedor)
+        if "data_ultima_consulta" in colunas_tabela:
+            set_list.append('"data_ultima_consulta" = NOW()')
+
         set_clause = ", ".join(set_list)
         on_conflict = f'ON CONFLICT ("symbol") DO UPDATE SET {set_clause}'
     else:
@@ -91,7 +101,7 @@ def inserir_opcoes_do_ativo(ativo_base: str, so_vencimento: Optional[str] = None
 
     sql = f'INSERT INTO "{ESQUEMA}"."{TABELA}" ({cols_sql}) VALUES %s {on_conflict}'
 
-    # 6) Execução em lote
+    # 7) Execução em lote
     con = conectar()
     if not con:
         raise RuntimeError("Sem conexão.")
@@ -101,4 +111,7 @@ def inserir_opcoes_do_ativo(ativo_base: str, so_vencimento: Optional[str] = None
         con.commit()
         return len(valores)
     finally:
-        con.close()
+        try:
+            con.close()
+        except Exception:
+            pass

@@ -49,3 +49,43 @@ def listar_vencimentos(ticker: str) -> List[str]:
     finally:
         try: conn.close()
         except Exception: pass
+
+def precisa_refresh(ticker: str, max_age_minutes: int = 2) -> bool:
+    """
+    True se não há dados do ticker OU se a última consulta (data_ultima_consulta)
+    tem mais de N minutos. Usa somente data_ultima_consulta.
+    """
+    sql = """
+        SELECT
+          (COUNT(*) = 0)
+          OR (NOW() - MAX(data_ultima_consulta)) > ((%s || ' minutes')::interval)
+        FROM public.opcoes_do_ativo
+        WHERE parent_symbol = %s
+    """
+    conn = conectar()
+    if not conn:
+        return True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, (str(max_age_minutes), ticker.upper().strip()))
+            return bool(cur.fetchone()[0])
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+
+def tentar_lock_ticker(conn, ticker: str) -> bool:
+    """
+    Advisory lock por ticker para evitar múltiplos refresh simultâneos.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT pg_try_advisory_lock(hashtext(%s))", (ticker.upper().strip(),))
+        return bool(cur.fetchone()[0])
+
+
+def liberar_lock_ticker(conn, ticker: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute("SELECT pg_advisory_unlock(hashtext(%s))", (ticker.upper().strip(),))
