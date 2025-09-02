@@ -1,4 +1,7 @@
 # core/app_core.py
+import os
+ttl_min = int(os.getenv("TTL_MIN", "2"))
+
 from etl.carregar_opcoes_db import inserir_opcoes_do_ativo
 from simulacoes.ls_screener import screener_ls_por_ticker_vencimento
 
@@ -40,7 +43,7 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
     # === TTL + LOCK: atualiza sob demanda (1x por ticker) ===
     # Se refresh=True → força atualização.
     # Se refresh=False → só atualiza se dado ausente/velho (TTL).
-    if refresh or precisa_refresh(ticker, max_age_minutes=2):
+    if refresh or precisa_refresh(ticker, max_age_minutes=ttl_min):
         _conn_lock = conectar()
         if _conn_lock:
             try:
