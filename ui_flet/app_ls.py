@@ -11,18 +11,13 @@ try:
 except Exception:
     pass
 
-
 import flet as ft
 from typing import Dict, Any, List
 
-import traceback  # <-- ADICIONE ESTA LINHA
-
 from services.api import buscar_detalhes_opcao
 from simulacoes.long_straddle import simular_long_straddle
-#from core.app_core import atualizar_e_screener_ls
-from core.app_core import atualizar_e_screener_ls, atualizar_e_screener_atm_2venc
+from core.app_core import atualizar_e_screener_atm_2venc
 
-# from repositories.opcoes_repo import listar_vencimentos  # se quiser usar depois
 
 # ---------------- Helpers ----------------
 def show_snack(page, msg: str):
@@ -86,38 +81,28 @@ def fallback_res(call: Dict[str, Any], put: Dict[str, Any]) -> Dict[str, Any]:
         "vencimento": venc,
     }
 
-def fmt_pct(x) -> str:
-    try:    return f"{float(x):.2f}%".replace(".", ",")
-    except: return "0,00%"
-
-def fmt_brl(x) -> str:
-    try:
-        s = f"{float(x):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        return f"R$ {s}"
-    except:
-        return "R$ 0,00"
 
 # -------------- Painel: Simulador --------------
 def build_simulador_panel(page):
-    # Dropdowns SEM opções fixas; serão preenchidos pelo screener
-    dd_call = ft.Dropdown(label="CALL", options=[], value=None, width=280)
-    dd_put  = ft.Dropdown(label="PUT",  options=[], value=None, width=280)
-
-    # Expor referências para outras partes da app (screener usa isso)
-    page.sim_dd_call = dd_call
-    page.sim_dd_put  = dd_put
+    # Dropdown ÚNICO de pares CALL - PUT (o screener preenche)
+    dd_par = ft.Dropdown(label="Par CALL - PUT", options=[], value=None, width=420)
 
     status_txt = ft.Text("", size=12)
     chart_container = ft.Container(width=700, height=380, padding=10, border_radius=12)
 
     def on_simular(_):
-        call_symbol = dd_call.value
-        put_symbol  = dd_put.value
-        if not call_symbol or not put_symbol:
-            show_snack(page, "Selecione uma CALL e uma PUT.")
+        if not dd_par.value:
+            show_snack(page, "Selecione um par de opções (CALL - PUT).")
             return
 
-        print("[simulador] clicou simular", flush=True)
+        # dd_par.value vem como "CALLSYM - PUTSYM" (texto do option)
+        try:
+            call_symbol, put_symbol = [s.strip() for s in dd_par.value.split(" - ", 1)]
+        except Exception:
+            show_snack(page, "Par inválido. Re-selecione um par CALL - PUT.")
+            return
+
+        print(f"[simulador] clicou simular: {call_symbol} x {put_symbol}", flush=True)
         btn_simular.disabled = True
         status_txt.value = f"Simulando {call_symbol} × {put_symbol}..."
         page.update()
@@ -151,18 +136,30 @@ def build_simulador_panel(page):
             btn_simular.disabled = False
             page.update()
 
-    # Botão começa desabilitado; o screener habilita quando preencher os dropdowns
+    # Botão começa desabilitado; habilita quando escolher um par
     btn_simular = ft.FilledButton("Simular Long Straddle", icon="show_chart", on_click=on_simular, disabled=True)
 
-    # Expor o handler para ser chamado pelo screener (se você desejar auto-simular)
+    page.sim_dd_par = dd_par
+    page.sim_on_simular = on_simular
+    page.sim_btn = btn_simular  # <-- importante para habilitar via screener
+
+    # Habilitar/desabilitar ao selecionar par
+    def habilitar_botao(_):
+        btn_simular.disabled = not bool(dd_par.value)
+        page.update()
+
+    dd_par.on_change = habilitar_botao
+
+    # Expor referências para o screener e para outros handlers
+    page.sim_dd_par = dd_par
     page.sim_on_simular = on_simular
 
     return ft.Container(
         content=ft.Column(
             [
                 ft.Text("Simulador Long Straddle", size=18),
-                ft.Text("Escolha uma CALL e uma PUT e visualize o payoff.", size=12),
-                ft.Row([dd_call, dd_put], spacing=12),
+                ft.Text("Escolha um par de opções CALL - PUT e visualize o payoff.", size=12),
+                dd_par,
                 btn_simular,
                 status_txt,
                 chart_container,
@@ -173,11 +170,26 @@ def build_simulador_panel(page):
         border_radius=12,
     )
 
+
 # -------------- Painel: Screener --------------
 def build_screener_panel(page):
     from datetime import date
 
+    LOT_MIN = 100
+
+    def _parse_total_lot(v, default=10000):
+        try:
+            x = int(float(v))
+            if x < LOT_MIN:
+                x = LOT_MIN
+        except Exception:
+            x = default
+        # normaliza para múltiplo de 100 (mais próximo)
+        m = (x + LOT_MIN // 2) // LOT_MIN * LOT_MIN
+        return int(m)
+
     tkr = ft.TextField(label="Ticker (ex.: PETR4)", width=220)
+    lote_total_tf = ft.TextField(label="Lote Total", width=150, value="10000", text_align=ft.TextAlign.RIGHT)
 
     # DatePicker
     dp = ft.DatePicker(first_date=date(2020, 1, 1), last_date=date(2035, 12, 31))
@@ -185,11 +197,8 @@ def build_screener_panel(page):
         page.overlay.append(dp)
         page.update()
 
-    tf_venc = ft.TextField(label="Vencimento", width=220, read_only=True, hint_text="YYYY-MM-DD")
     _H = 48
     _PAD = ft.padding.only(left=12, right=12, top=12, bottom=12)
-
-    #tkr = ft.TextField(label="Ticker (ex.: PETR4)", width=220, height=_H, content_padding=_PAD)
 
     tf_venc = ft.TextField(
         label="Vencimento",
@@ -200,7 +209,6 @@ def build_screener_panel(page):
         hint_text="YYYY-MM-DD",
         visible=False
     )
-
 
     def abrir_calendario(_):
         print("[screener] abrir_calendario()", flush=True)
@@ -230,9 +238,7 @@ def build_screener_panel(page):
         spacing=10
     )
 
-    # >>> ADIÇÃO: área de saída onde o screener será listado
-    # antes era: output = ft.Text(value="Resultados aparecerão aqui.\n", selectable=True)
-    output = ft.Text(value="", selectable=True, visible=False)  # fica oculto; uso só para mensagens de erro
+    output = ft.Text(value="", selectable=True, visible=False)
 
     table = ft.DataTable(
         columns=[
@@ -245,74 +251,70 @@ def build_screener_panel(page):
             ft.DataColumn(ft.Text("BE↑")),
             ft.DataColumn(ft.Text("Spot")),
             ft.DataColumn(ft.Text("Prêmio Total")),
-
-            # --- NOVAS COLUNAS ---
             ft.DataColumn(ft.Text("Prêmio CALL")),
             ft.DataColumn(ft.Text("Δ CALL")),
             ft.DataColumn(ft.Text("Prêmio PUT")),
             ft.DataColumn(ft.Text("Δ PUT")),
-            # ----------------------
-
             ft.DataColumn(ft.Text("Vencimento")),
+            # --- NOVAS COLUNAS (clean) ---
+            ft.DataColumn(ft.Text("Lote CALL")),
+            ft.DataColumn(ft.Text("Lote PUT")),
+            ft.DataColumn(ft.Text("Custo Operação")),
+
         ],
         rows=[],
         column_spacing=12,
-
     )
+
     table.visible = False
 
-    # [PATCH-4] handler: carrega CALL/PUT da linha no simulador e troca de painel
+    # Carrega o par no simulador ao selecionar linha
     def on_row_select(e, call_symbol, put_symbol):
         try:
-            dd_call = getattr(page, "sim_dd_call", None)
-            dd_put = getattr(page, "sim_dd_put", None)
-            sim_fn = getattr(page, "sim_on_simular", None)  # <- handler do simulador, exposto no build_simulador_panel
+            dd_par = getattr(page, "sim_dd_par", None)
+            sim_fn = getattr(page, "sim_on_simular", None)
 
-            if not (dd_call and dd_put):
-                show_snack(page, "Não encontrei os campos do simulador.")
+            if not dd_par:
+                show_snack(page, "Não encontrei o dropdown do simulador (par CALL-PUT).")
                 return
 
-            # garante que os valores existam nas opções do Dropdown
-            def ensure_option(dd, val):
-                if not val:
-                    return
-                existing = []
-                for opt in dd.options:
-                    k = getattr(opt, "key", None)
-                    if k is None:
-                        k = getattr(opt, "text", None)
-                    existing.append(k)
-                if val not in existing:
-                    dd.options.append(ft.dropdown.Option(val))
-                dd.value = val
-                dd.update()
+            label = f"{call_symbol} - {put_symbol}"
 
-            ensure_option(dd_call, call_symbol)
-            ensure_option(dd_put, put_symbol)
+            # garantir que a opção exista (Option(text))
+            existing_texts = [getattr(opt, "text", None) for opt in (dd_par.options or [])]
+            if label not in existing_texts:
+                dd_par.options.append(ft.dropdown.Option(label))
 
-            show_snack(page, f"CALL {call_symbol} e PUT {put_symbol} carregadas no simulador.")
+            dd_par.value = label
+            dd_par.update()
 
-            # alterna para o painel do simulador (se exposto em page.go_simulador)
+            # habilita botão programaticamente (sem depender de on_change)
+            sim_btn = getattr(page, "sim_btn", None)
+            if sim_btn:
+                sim_btn.disabled = False
+                sim_btn.update()
+
+            show_snack(page, f"Par carregado no simulador: {label}")
+
             go_sim = getattr(page, "go_simulador", None)
             if callable(go_sim):
                 go_sim(None)
 
-            # garante que a UI reflita os valores antes de simular
             page.update()
 
-            # dispara a simulação automaticamente (se exposta em page.sim_on_simular)
             if callable(sim_fn):
                 sim_fn(None)
             else:
                 show_snack(page, "Clique em 'Simular Long Straddle' para rodar.")
-
         except Exception as ex:
             show_snack(page, f"Erro ao carregar no simulador: {ex}")
 
     def on_screener(_):
         try:
             t = (tkr.value or "").strip().upper()
-            print(f"[screener] Rodar screener ATM (2 vencimentos): t={t}", flush=True)
+            total_lot = _parse_total_lot(lote_total_tf.value, default=10000)
+
+            print(f"[screener] Rodar screener ATM (2 vencimentos): t={t}, total_lot={total_lot}", flush=True)
 
             if not t:
                 status.value = "Informe o Ticker."
@@ -322,7 +324,6 @@ def build_screener_panel(page):
                 page.update()
                 return
 
-            # helpers locais (padrão BR: vírgula como separador decimal)
             def _to_f(v):
                 try:
                     return float(v)
@@ -347,7 +348,8 @@ def build_screener_panel(page):
             table.rows = []
             page.update()
 
-            # NOVO: screener ATM (2 próximos vencimentos)
+            # screener ATM (2 próximos vencimentos)
+            from core.app_core import atualizar_e_screener_atm_2venc
             res = atualizar_e_screener_atm_2venc(t)
             linhas = (res or {}).get("atm", [])
             if not linhas:
@@ -358,24 +360,79 @@ def build_screener_panel(page):
                 page.update()
                 return
 
+            def _round_lots(call_raw, put_raw, lot_min, total):
+                # arredonda para baixo para múltiplos de lot_min
+                c = int(call_raw // lot_min) * lot_min
+                p = int(put_raw  // lot_min) * lot_min
+                rem = total - (c + p)
+                # distribui o restante (em blocos de lot_min) para quem tiver maior fração pendente
+                while rem >= lot_min:
+                    frac_c = (call_raw - c)
+                    frac_p = (put_raw  - p)
+                    if frac_c >= frac_p:
+                        c += lot_min
+                    else:
+                        p += lot_min
+                    rem -= lot_min
+                return c, p
+
             def make_row(r):
                 call = r.get("call", "")
-                put = r.get("put", "")
+                put  = r.get("put", "")
 
-                # helpers com vírgula como separador decimal
-                def _to_f(v):
+                # deltas podem vir None; tratamos
+                delta_c = r.get("call_delta")
+                delta_p = r.get("put_delta")
+
+                # pesos pelos deltas (valor absoluto)
+                w_call = abs(float(delta_p)) if delta_p is not None else None
+                w_put  = abs(float(delta_c)) if delta_c is not None else None
+
+                # fallback de pesos se deltas ausentes/zero
+                if not w_call and not w_put:
+                    w_call = w_put = 1.0
+                elif not w_call:
+                    w_call = 1.0
+                elif not w_put:
+                    w_put = 1.0
+
+                soma = (w_call or 0.0) + (w_put or 0.0)
+                if soma == 0:
+                    w_call = w_put = 1.0
+                    soma = 2.0
+
+                raw_call = total_lot * (w_call / soma)
+                raw_put  = total_lot - raw_call
+
+                qty_call, qty_put = _round_lots(raw_call, raw_put, LOT_MIN, total_lot)
+
+                def _fmt_money(v):
                     try:
-                        return float(v)
+                        s = f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        return f"R$ {s}"
                     except Exception:
-                        return 0.0
+                        return "R$ 0,00"
 
-                def _fmt2(v):  # 2 casas, usa vírgula
+                call_premio = _to_f(r.get("call_premio"))
+                put_premio = _to_f(r.get("put_premio"))
+                # Se seus prêmios forem "por contrato (100)", use:
+                # custo_oper = (qty_call/100) * call_premio + (qty_put/100) * put_premio
+                custo_oper = qty_call * call_premio + qty_put * put_premio
+
+                def _fmt2l(v):
+                    # inteiro com separador de milhar BR
+                    try:
+                        return f"{int(v):,}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    except Exception:
+                        return "0"
+
+                def _fmt2(v):
                     return f"{_to_f(v):.2f}".replace(".", ",")
 
-                def _fmt4(v):  # 4 casas, usa vírgula
+                def _fmt4(v):
                     return f"{_to_f(v):.4f}".replace(".", ",")
 
-                def _fmt_pct(v):  # percentual com vírgula
+                def _fmt_pct2(v):
                     try:
                         return f"{float(v):.2f}".replace(".", ",") + "%"
                     except Exception:
@@ -383,25 +440,27 @@ def build_screener_panel(page):
 
                 return ft.DataRow(
                     cells=[
-                        ft.DataCell(ft.Text("ATM")),  # Bucket
-                        ft.DataCell(ft.Text(call)),  # CALL
-                        ft.DataCell(ft.Text(put)),  # PUT
-                        ft.DataCell(ft.Text(_fmt2(r.get("strike")))),  # Strike (R$)
-                        ft.DataCell(ft.Text(_fmt_pct(r.get("be_pct")))),  # BE%
-                        ft.DataCell(ft.Text(_fmt2(r.get("be_down")))),  # BE↓ (R$)
-                        ft.DataCell(ft.Text(_fmt2(r.get("be_up")))),  # BE↑ (R$)
-                        ft.DataCell(ft.Text(_fmt2(r.get("spot")))),  # Spot (R$)
-                        ft.DataCell(ft.Text(_fmt4(r.get("premium_total")))),  # Prêmio Total (R$)
+                        ft.DataCell(ft.Text("ATM")),
+                        ft.DataCell(ft.Text(call)),
+                        ft.DataCell(ft.Text(put)),
+                        ft.DataCell(ft.Text(_fmt2(r.get("strike")))),
+                        ft.DataCell(
+                            ft.Text(_fmt_pct(v := r.get("be_pct")) if (v := r.get("be_pct")) is not None else "")),
+                        # opcional
+                        ft.DataCell(ft.Text(_fmt2(r.get("be_down")))),
+                        ft.DataCell(ft.Text(_fmt2(r.get("be_up")))),
+                        ft.DataCell(ft.Text(_fmt2(r.get("spot")))),
+                        ft.DataCell(ft.Text(_fmt4(r.get("premium_total")))),
+                        ft.DataCell(ft.Text(_fmt4(r.get("call_premio")))),
+                        ft.DataCell(ft.Text(_fmt4(delta_c) if delta_c is not None else "")),
+                        ft.DataCell(ft.Text(_fmt4(r.get("put_premio")))),
+                        ft.DataCell(ft.Text(_fmt4(delta_p) if delta_p is not None else "")),
+                        ft.DataCell(ft.Text(r.get("due_date", ""))),
+                        # --- NOVAS CÉLULAS (somente os dois lotes) ---
+                        ft.DataCell(ft.Text(_fmt2l(qty_call))),
+                        ft.DataCell(ft.Text(_fmt2l(qty_put))),
+                        ft.DataCell(ft.Text(_fmt_money(custo_oper))),
 
-                        # Novas colunas (também com vírgula)
-                        ft.DataCell(ft.Text(_fmt4(r.get("call_premio")))),  # Prêmio CALL (R$)
-                        ft.DataCell(ft.Text(_fmt4(r.get("call_delta")) if r.get("call_delta") is not None else "")),
-                        # Δ CALL
-                        ft.DataCell(ft.Text(_fmt4(r.get("put_premio")))),  # Prêmio PUT (R$)
-                        ft.DataCell(ft.Text(_fmt4(r.get("put_delta")) if r.get("put_delta") is not None else "")),
-                        # Δ PUT
-
-                        ft.DataCell(ft.Text(r.get("due_date", ""))),  # Vencimento
                     ],
                     on_select_changed=lambda e, c=call, p=put: on_row_select(e, c, p),
                 )
@@ -409,25 +468,28 @@ def build_screener_panel(page):
             table.rows = [make_row(r) for r in linhas]
             table.visible = True
 
-            # Preencher dropdowns com as opções retornadas pelo screener (sem fixos)
-            calls_opts = sorted({r["call"] for r in linhas if r.get("call")})
-            puts_opts = sorted({r["put"] for r in linhas if r.get("put")})
+            # ---- Preencher dropdown único com os pares CALL - PUT (Option(text)) ----
+            # ---- Preencher dropdown único com os pares CALL - PUT (Option(text)) ----
+            labels = []
+            for r in linhas:
+                call = r.get("call")
+                put = r.get("put")
+                if call and put:
+                    labels.append(f"{call} - {put}")
 
-            page.sim_dd_call.options = [ft.dropdown.Option(s) for s in calls_opts]
-            page.sim_dd_put.options = [ft.dropdown.Option(s) for s in puts_opts]
+            labels = sorted(set(labels))
+            print(f"[screener] pares encontrados: {len(labels)}", flush=True)
 
-            # (opcional) selecionar a primeira combinação como padrão
-            # if calls_opts and puts_opts:
-            #     page.sim_dd_call.value = calls_opts[0]
-            #     page.sim_dd_put.value  = puts_opts[0]
-
-            btn_simular.disabled = False
-            dropdowns_enable(True)
+            if hasattr(page, "sim_dd_par"):
+                page.sim_dd_par.options = [ft.dropdown.Option(lbl) for lbl in labels]
+                # NÃO pré-seleciona: deixa em branco para forçar a escolha do usuário
+                page.sim_dd_par.value = None
+                page.sim_dd_par.update()
+            # ------------------------------------------------------------------------
 
             busy.visible = False
             status.value = f"{len(linhas)} linhas ATM (2 vencimentos)."
             page.update()
-
 
         except Exception as ex:
             busy.visible = False
@@ -435,30 +497,28 @@ def build_screener_panel(page):
             show_snack(page, f"Erro no screener ATM: {ex}")
             page.update()
 
-    #btn_screener = ft.FilledButton("Selecionar data", icon="event", on_click=abrir_calendario)
-    btn_rodar     = ft.FilledButton("Rodar screener", icon="search", on_click=on_screener)
+    btn_rodar = ft.FilledButton("Rodar screener", icon="search", on_click=on_screener)
 
     return ft.Container(
         content=ft.Column(
             [
                 ft.Text("Screener de Long Straddle", size=18),
-                ft.Text("Informe Ticker para listar pares CALL/PUT.", size=12),
-                ft.Row([tkr, tf_venc], spacing=10),           # ambos 220px
-                #ft.Row([btn_screener, btn_rodar], spacing=10),
+                ft.Text("Informe Ticker para listar pares CALL/PUT e o Lote Total (múltiplo de 100).", size=12),
+                ft.Row([tkr, lote_total_tf, tf_venc], spacing=10),
                 ft.Row([btn_rodar], spacing=10),
                 status,
                 busy,
                 ft.Divider(),
                 ft.Text("Resultado"),
-                # >>> ADIÇÃO: exibição do resultado
-                table,  # aparece só com dados
-                output,  # aparece só p/ mensagens
+                table,
+                output,
             ],
             spacing=14
         ),
         padding=20,
         border_radius=12,
     )
+
 
 # -------------- App --------------
 def main(page):
@@ -470,7 +530,8 @@ def main(page):
 
     simulador_panel = build_simulador_panel(page)
     screener_panel  = build_screener_panel(page)
-    #screener_panel.visible = False  # começa no simulador
+
+    # começa no Screener
     simulador_panel.visible = False
 
     def show_simulador(_):
@@ -485,11 +546,14 @@ def main(page):
         screener_panel.visible  = True
         page.update()
 
+    # Expor handlers de navegação
+    page.go_simulador = show_simulador
+    page.go_screener  = show_screener
+
     menu = ft.Row(
         controls=[
             ft.FilledTonalButton("Screener",  icon="search",     on_click=show_screener),
             ft.FilledTonalButton("Simulador", icon="show_chart", on_click=show_simulador),
-
         ],
         spacing=10
     )
