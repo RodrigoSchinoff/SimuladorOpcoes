@@ -76,6 +76,26 @@ def precisa_refresh(ticker: str, max_age_minutes: int = 2) -> bool:
             pass
 
 
+def precisa_refresh_por_data(ticker: str, due_date: str, max_age_minutes: int = 2) -> bool:
+    sql = """
+        SELECT
+          (COUNT(*) = 0)
+          OR (NOW() - MAX(data_ultima_consulta)) > ((%s || ' minutes')::interval)
+        FROM public.opcoes_do_ativo
+        WHERE parent_symbol = %s AND due_date = %s
+    """
+    conn = conectar()
+    if not conn:
+        return True
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, (str(max_age_minutes), ticker.upper().strip(), due_date))
+            return bool(cur.fetchone()[0])
+    finally:
+        try: conn.close()
+        except: pass
+
+
 
 def tentar_lock_ticker(conn, ticker: str) -> bool:
     """
