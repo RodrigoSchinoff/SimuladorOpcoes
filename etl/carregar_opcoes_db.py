@@ -47,6 +47,17 @@ def inserir_opcoes_do_ativo(ativo_base: str, so_vencimento: Optional[str] = None
     dados = buscar_opcoes_ativo(ativo_norm)
     rows = _to_list(dados)
 
+    print(f"DEBUG1: len(rows)= {len(rows)}", flush=True)
+    if rows:
+        print(f"DEBUG1: keys[0]= {sorted(list(rows[0].keys()))}", flush=True)
+        try:
+            print("DEBUG1: sample spot/bid =", rows[0].get("spot_price"), rows[0].get("bid"), flush=True)
+        except Exception:
+            pass
+        n_spot = sum(1 for r in rows if r.get("spot_price") is not None)
+        print(f"DEBUG1: possui 'spot_price' em quantas linhas? {n_spot} nulos spot_price: {len(rows) - n_spot}",
+              flush=True)
+
     # (opcional) filtrar por vencimento específico
     if so_vencimento:
         rows = [r for r in rows if r.get("due_date") == so_vencimento]
@@ -56,6 +67,9 @@ def inserir_opcoes_do_ativo(ativo_base: str, so_vencimento: Optional[str] = None
 
     # 2) Colunas existentes na tabela
     colunas_tabela = _colunas_da_tabela()
+
+    print("DEBUG2: 'spot_price' na tabela?", "spot_price" in colunas_tabela, flush=True)
+    print("DEBUG2: total colunas_tabela =", len(colunas_tabela), flush=True)
 
     # 3) Interseção: só colunas que EXISTEM NA TABELA e aparecem em PELO MENOS UM item do JSON
     #    OBS: NÃO colocamos "data_ultima_consulta" aqui para o INSERT usar DEFAULT now() no servidor.
