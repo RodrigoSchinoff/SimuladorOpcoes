@@ -48,3 +48,49 @@ def salvar_json_em_arquivo(dados, nome_arquivo):
     with open(caminho, "w", encoding="utf-8") as f:
         json.dump(dados, f, indent=2, ensure_ascii=False)
     print(f"✅ JSON salvo em: {caminho}")
+
+
+# --- Spot oficial do ativo (Oplab) ---
+STOCK_URL = "https://api.oplab.com.br/v3/market/stocks/{symbol}?with_financials=false"
+
+def get_spot_ativo_oficial(ticker: str) -> float | None:
+    """
+    Retorna o último preço do ATIVO (spot) pela API oficial (Oplab) usando o mesmo HEADERS.
+    Ex.: PETR4 -> 29.98
+    """
+    if not ticker:
+        return None
+    url = STOCK_URL.format(symbol=ticker.upper().strip())
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=4.0)
+        if r.status_code != 200:
+            return None
+        data = r.json() or {}
+
+        # tenta várias chaves no nível raiz
+        candidates = []
+        for k in ("lastPrice", "last", "price", "regularMarketPrice", "close", "spot"):
+            v = data.get(k)
+            try:
+                v = float(v)
+                if v > 0:
+                    candidates.append(v)
+            except Exception:
+                pass
+
+        # ou dentro de data["data"]
+        if not candidates and isinstance(data.get("data"), dict):
+            for k in ("lastPrice", "last", "price", "regularMarketPrice", "close", "spot"):
+                v = data["data"].get(k)
+                try:
+                    v = float(v)
+                    if v > 0:
+                        candidates.append(v)
+                except Exception:
+                    pass
+
+        if not candidates:
+            return None
+        return round(candidates[0], 2)
+    except Exception:
+        return None
