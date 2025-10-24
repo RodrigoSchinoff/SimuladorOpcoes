@@ -98,7 +98,6 @@ def fallback_res(call: Dict[str, Any], put: Dict[str, Any]) -> Dict[str, Any]:
 def build_simulador_panel(page):
     import datetime as dt
     from simulacoes.black_scholes import black_scholes, implied_vol
-    from services.api import buscar_opcoes_ativo  # <-- para spot mais recente do ticker
 
     # SELIC automática (com fallback)
     try:
@@ -137,19 +136,6 @@ def build_simulador_panel(page):
         if " - " in val:
             a, b = val.split(" - ", 1); return a.strip(), b.strip()
         return None, None
-
-    def _latest_spot(ticker: str) -> float:
-        try:
-            lista = buscar_opcoes_ativo(ticker.upper().strip())
-            if isinstance(lista, list) and lista:
-                rec = max(
-                    (r for r in lista if isinstance(r, dict) and r.get("spot_price") is not None),
-                    key=lambda r: (r.get("time") or 0)
-                )
-                return to_float(rec.get("spot_price"))
-        except Exception:
-            pass
-        return 0.0
 
     # -------- Form BS (q=0; dias vêm do par; tipo FIXO por card) --------
     def _make_bs_form(fixed_kind: str):
@@ -301,27 +287,25 @@ def build_simulador_panel(page):
         v = dd_par.value
         call_symbol, put_symbol = _split_par(v)
         if not (call_symbol and put_symbol):
-            btn_simular.disabled = True; page.update(); return
+            btn_simular.disabled = True
+            page.update()
+            return
         try:
             call = buscar_detalhes_opcao(call_symbol)
             put  = buscar_detalhes_opcao(put_symbol)
 
-            # Descobre o ticker do par
-            ticker = (call.get("parent_symbol")
-                      or put.get("parent_symbol")
-                      or (call_symbol[:5].rstrip("0123456789"))).upper()
-
-            # Spot mais recente do ticker (API de lista)
-            spot_api = _latest_spot(ticker)
-
-            # Fallback: spot do detalhe
-            spot = spot_api or to_float(call.get("spot_price") or put.get("spot_price"))
+            # SPOT único vindo do screener (se existir); mantém coerência calculadoras + tabela
+            spot_ovr = getattr(page, "spot_override", None)
+            if spot_ovr is not None:
+                spot = float(spot_ovr)
+            else:
+                spot = to_float(call.get("spot_price") or put.get("spot_price"))
 
             # Dias (API ou por due_date)
-            days = call.get("days_to_maturity") or put.get("days_to_maturity")
-            if not days:
-                days = _days_from_due(call.get("due_date") or put.get("due_date") or "")
+            days = call.get("days_to_maturity") or put.get("days_to_maturity") \
+                   or _days_from_due(call.get("due_date") or put.get("due_date") or "")
 
+            # Preços de referência (mid)
             prem_call = _mid_price(call)
             prem_put  = _mid_price(put)
 
@@ -379,6 +363,28 @@ def build_screener_panel(page):
 
     tkr = ft.TextField(label="Ticker (ex.: PETR4)", width=220)
     lote_total_tf = ft.TextField(label="Lote Total", width=150, value="10000", text_align=ft.TextAlign.RIGHT)
+
+    # --- NOVO: seleção de horizonte e crush ---
+    dd_horiz = ft.Dropdown(
+        label="Horizonte",
+        options=[ft.dropdown.Option("Vencimento"), ft.dropdown.Option("D+1")],
+        value="Vencimento",
+        width=200,  # ↑ aumentamos para não “comer” o texto
+    )
+
+    tf_crush = ft.TextField(
+        label="Crush IV (%)",
+        value="10",
+        width=120,
+        text_align=ft.TextAlign.RIGHT,
+        disabled=True,  # ← começa desabilitado (só habilita em D+1)
+    )
+
+    def _on_horiz_change(_):
+        tf_crush.disabled = (dd_horiz.value != "D+1")
+        tf_crush.update()
+
+    dd_horiz.on_change = _on_horiz_change
 
     # DatePicker
     dp = ft.DatePicker(first_date=date(2020, 1, 1), last_date=date(2035, 12, 31))
@@ -498,6 +504,44 @@ def build_screener_panel(page):
         except Exception as ex:
             show_snack(page, f"Erro ao carregar no simulador: {ex}")
 
+    # ---- SPOT ÚNICO (sempre igual na grade inteira) ----
+    def _spot_unico(tkr: str) -> float | None:
+        t = (tkr or "").upper().strip()
+        # (a) fonte BS do ativo — quando existir no seu projeto (placeholder)
+        for fn_name in ("get_spot_ativo_bs", "spot_ativo_bs", "black_scholes_spot"):
+            try:
+                fn = getattr(__import__("services.api", fromlist=[fn_name]), fn_name)
+                v = float(fn(t))
+                if v > 0:
+                    return round(v, 2)
+            except Exception:
+                pass
+        # (b) fallback: payload das opções — mediana das amostras no maior 'time'
+        try:
+            from services.api import buscar_opcoes_ativo
+            lista = buscar_opcoes_ativo(t)
+            xs, ts = [], []
+            for r in (lista or []):
+                if isinstance(r, dict):
+                    sp = r.get("spot_price")
+                    tm = r.get("time")
+                    if sp is not None:
+                        xs.append(float(sp))
+                    if tm is not None:
+                        ts.append(int(tm))
+            if not xs:
+                return None
+            if ts:
+                tmax = max(ts)
+                xs = [float(r["spot_price"]) for r in lista
+                      if isinstance(r, dict) and r.get("spot_price") is not None and r.get("time") == tmax] or xs
+            xs.sort()
+            n = len(xs)
+            med = xs[n // 2] if n % 2 else 0.5 * (xs[n // 2 - 1] + xs[n // 2])
+            return round(float(med), 2)
+        except Exception:
+            return None
+
     def on_screener(_):
         try:
             t = (tkr.value or "").strip().upper()
@@ -523,7 +567,7 @@ def build_screener_panel(page):
             def _fmt4(v):  # 4 casas, decimal com vírgula
                 return f"{_to_f(v):.4f}".replace(".", ",")
 
-            def _fmt_pct(v):  # percentual com vírgula
+            def _fmt_pct(v):  # percentual com vírgula (v já deve ser %)
                 try:
                     return f"{float(v):.2f}%".replace(".", ",")
                 except Exception:
@@ -538,6 +582,97 @@ def build_screener_panel(page):
             # screener ATM com refresh forçado
             res = atualizar_e_screener_atm_2venc(t, refresh=True)
             linhas = (res or {}).get("atm", [])
+
+            # -------- SPOT ÚNICO (prioriza Oplab oficial) --------
+            from services.api import get_spot_ativo_oficial
+            spot_uni = get_spot_ativo_oficial(t)
+            if spot_uni is None:
+                # fallback local já existente
+                try:
+                    spot_uni = _spot_unico(t)
+                except Exception:
+                    spot_uni = None
+            if spot_uni is None and linhas:
+                spot_uni = _to_f(linhas[0].get("spot"))
+            spot_uni = _to_f(spot_uni) if spot_uni is not None else 0.0
+            page.spot_override = spot_uni  # simulador também usa o mesmo spot
+            # ------------------------------------------------------
+
+            # ---------- Cálculo D+1 (simulação em memória) ----------
+            if dd_horiz.value == "D+1" and linhas:
+                from simulacoes.black_scholes import black_scholes, implied_vol
+                from services.api import buscar_detalhes_opcao
+
+                def _mid(d: dict) -> float:
+                    b = to_float(d.get("bid"));
+                    a = to_float(d.get("ask"))
+                    if b > 0 and a > 0:
+                        return (b + a) / 2.0
+                    for k in ("ask", "last", "close", "bid"):
+                        v = to_float(d.get(k))
+                        if v > 0:
+                            return v
+                    return 0.0
+
+                def _implied_or_min(preco, S, K, r, T, kind):
+                    try:
+                        iv = implied_vol(preco, S, K, r, 0.0, T, kind)
+                        return max(0.0001, iv) if iv else 0.0001
+                    except Exception:
+                        return 0.0001
+
+                crush = to_float(tf_crush.value, 10.0)  # %
+                f = max(0.0, 1.0 - crush / 100.0)
+                r_aa = to_float(os.getenv("SELIC_AA", "10.0")) / 100.0
+
+                for r in linhas:
+                    call = r.get("call");
+                    put = r.get("put")
+                    if not (call and put):
+                        continue
+                    try:
+                        cd = buscar_detalhes_opcao(call)
+                        pd = buscar_detalhes_opcao(put)
+
+                        # === SEMPRE o mesmo SPOT ÚNICO ===
+                        S = spot_uni if spot_uni is not None else to_float(cd.get("spot_price") or pd.get("spot_price"))
+                        Kc = to_float(cd.get("strike"))
+                        Kp = to_float(pd.get("strike"))
+
+                        # dias -> T hoje e T-1 dia
+                        def _T_days(x):
+                            return max(1, int(to_float(x, 1))) / 252.0
+
+                        Tc = _T_days(cd.get("days_to_maturity"))
+                        Tp = _T_days(pd.get("days_to_maturity"))
+                        Tc1 = max(Tc - 1 / 252.0, 1e-6)
+                        Tp1 = max(Tp - 1 / 252.0, 1e-6)
+
+                        # preço de mercado hoje (para inferir IV)
+                        Pc_mkt = _mid(cd)
+                        Pp_mkt = _mid(pd)
+
+                        # IV hoje (inferida) e IV com crush
+                        sig_c = _implied_or_min(Pc_mkt, S, Kc, r_aa, Tc, "CALL")
+                        sig_p = _implied_or_min(Pp_mkt, S, Kp, r_aa, Tp, "PUT")
+                        sig_c1 = max(1e-4, sig_c * f)
+                        sig_p1 = max(1e-4, sig_p * f)
+
+                        # preço teórico D+1
+                        Pc1 = black_scholes(S, Kc, r_aa, 0.0, sig_c1, Tc1, "CALL")["preco"]
+                        Pp1 = black_scholes(S, Kp, r_aa, 0.0, sig_p1, Tp1, "PUT")["preco"]
+
+                        r["call_premio"] = Pc1
+                        r["put_premio"] = Pp1
+                        r["premium_total"] = Pc1 + Pp1
+                        r["be_down"] = round(Kp - (Pc1 + Pp1), 4)
+                        r["be_up"] = round(Kc + (Pc1 + Pp1), 4)
+                        r["spot"] = S  # guardo no dict, mas exibiremos spot_uni na grade
+                        # BE% será calculado de forma unificada no make_row a partir de spot_uni
+                    except Exception:
+                        continue
+            # ---------- Fim D+1 ----------
+
             if not linhas:
                 output.value = "Nenhuma linha ATM encontrada."
                 output.visible = True
@@ -548,11 +683,11 @@ def build_screener_panel(page):
 
             def _round_lots(call_raw, put_raw, lot_min, total):
                 c = int(call_raw // lot_min) * lot_min
-                p = int(put_raw  // lot_min) * lot_min
+                p = int(put_raw // lot_min) * lot_min
                 rem = total - (c + p)
                 while rem >= lot_min:
                     frac_c = (call_raw - c)
-                    frac_p = (put_raw  - p)
+                    frac_p = (put_raw - p)
                     if frac_c >= frac_p:
                         c += lot_min
                     else:
@@ -562,13 +697,13 @@ def build_screener_panel(page):
 
             def make_row(r):
                 call = r.get("call", "")
-                put  = r.get("put", "")
+                put = r.get("put", "")
 
                 delta_c = r.get("call_delta")
                 delta_p = r.get("put_delta")
 
                 w_call = abs(float(delta_p)) if delta_p is not None else None
-                w_put  = abs(float(delta_c)) if delta_c is not None else None
+                w_put = abs(float(delta_c)) if delta_c is not None else None
 
                 if not w_call and not w_put:
                     w_call = w_put = 1.0
@@ -583,7 +718,7 @@ def build_screener_panel(page):
                     soma = 2.0
 
                 raw_call = total_lot * (w_call / soma)
-                raw_put  = total_lot - raw_call
+                raw_put = total_lot - raw_call
 
                 qty_call, qty_put = _round_lots(raw_call, raw_put, LOT_MIN, total_lot)
 
@@ -600,11 +735,9 @@ def build_screener_panel(page):
                 # Se os prêmios já consideram contrato de 100, ajuste aqui:
                 # custo_oper = (qty_call/100) * call_premio + (qty_put/100) * put_premio
 
-                def _fmt2l(v):
-                    try:
-                        return f"{int(v):,}".replace(",", "X").replace(".", ",").replace("X", ".")
-                    except Exception:
-                        return "0"
+                # BE% mostrado: sempre com o mesmo spot_uni e BE↑
+                be_up_val = r.get("be_up")
+                be_pct_show = ((be_up_val / spot_uni) - 1.0) * 100.0 if (spot_uni and be_up_val) else None
 
                 return ft.DataRow(
                     cells=[
@@ -612,24 +745,34 @@ def build_screener_panel(page):
                         ft.DataCell(ft.Text(call)),
                         ft.DataCell(ft.Text(put)),
                         ft.DataCell(ft.Text(_fmt2(r.get("strike")))),
-                        ft.DataCell(ft.Text(_fmt_pct(r.get("be_pct")) if r.get("be_pct") is not None else "")),
+                        ft.DataCell(ft.Text(_fmt_pct(be_pct_show) if be_pct_show is not None else "")),
                         ft.DataCell(ft.Text(_fmt2(r.get("be_down")))),
                         ft.DataCell(ft.Text(_fmt2(r.get("be_up")))),
-                        ft.DataCell(ft.Text(_fmt2(r.get("spot")))),
+                        ft.DataCell(ft.Text(_fmt2(spot_uni))),
                         ft.DataCell(ft.Text(_fmt4(r.get("premium_total")))),
                         ft.DataCell(ft.Text(_fmt4(r.get("call_premio")))),
                         ft.DataCell(ft.Text(_fmt4(delta_c) if delta_c is not None else "")),
                         ft.DataCell(ft.Text(_fmt4(r.get("put_premio")))),
                         ft.DataCell(ft.Text(_fmt4(delta_p) if delta_p is not None else "")),
                         ft.DataCell(ft.Text(r.get("due_date", ""))),
-                        ft.DataCell(ft.Text(_fmt2l(qty_call))),
-                        ft.DataCell(ft.Text(_fmt2l(qty_put))),
+                        ft.DataCell(
+                            ft.Text(f"{int(qty_call):,}".replace(",", "X").replace(".", ",").replace("X", "."))),
+                        ft.DataCell(ft.Text(f"{int(qty_put):,}".replace(",", "X").replace(".", ",").replace("X", "."))),
                         ft.DataCell(ft.Text(_fmt_money(custo_oper))),
                     ],
                     on_select_changed=lambda e, c=call, p=put: on_row_select(e, c, p),
                 )
 
-            table.rows = [make_row(r) for r in linhas]
+            safe_rows = []
+            for r in linhas:
+                try:
+                    row = make_row(r)
+                    if row is not None:
+                        safe_rows.append(row)
+                except Exception as ex:
+                    print(f"[ROW] ignorada {r.get('call')}|{r.get('put')} -> {ex}", flush=True)
+            table.rows = safe_rows
+
             table.visible = True
 
             # Preencher dropdown único com os pares CALL - PUT (Option com key/text)
@@ -664,14 +807,19 @@ def build_screener_panel(page):
             show_snack(page, f"Erro no screener ATM: {ex}")
             page.update()
 
+    # <<-- AQUI TERMINA o try/except do on_screener -->>
+
+
+    # botão para rodar o screener
     btn_rodar = ft.FilledButton("Rodar screener", icon="search", on_click=on_screener)
 
+    # retorno da UI do screener (sem isso a função retorna None e quebra a app)
     return ft.Container(
         content=ft.Column(
             [
                 ft.Text("Screener de Long Straddle", size=18),
                 ft.Text("Informe Ticker para listar pares CALL/PUT e o Lote Total (múltiplo de 100).", size=12),
-                ft.Row([tkr, lote_total_tf, tf_venc], spacing=10),
+                ft.Row([tkr, lote_total_tf, dd_horiz, tf_crush, tf_venc], spacing=10),
                 ft.Row([btn_rodar], spacing=10),
                 status,
                 busy,
@@ -685,7 +833,6 @@ def build_screener_panel(page):
         padding=20,
         border_radius=12,
     )
-
 
 # -------------- App --------------
 def main(page):
