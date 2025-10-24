@@ -386,6 +386,8 @@ def build_screener_panel(page):
 
     dd_horiz.on_change = _on_horiz_change
 
+
+
     # DatePicker
     dp = ft.DatePicker(first_date=date(2020, 1, 1), last_date=date(2035, 12, 31))
     if dp not in page.overlay:
@@ -439,8 +441,9 @@ def build_screener_panel(page):
             ft.DataColumn(ft.Text("CALL")),
             ft.DataColumn(ft.Text("PUT")),
             ft.DataColumn(ft.Text("Strike")),
-            ft.DataColumn(ft.Text("BE%")),
+            ft.DataColumn(ft.Text("%BE↓")),
             ft.DataColumn(ft.Text("BE↓")),
+            ft.DataColumn(ft.Text("%BE↑")),
             ft.DataColumn(ft.Text("BE↑")),
             ft.DataColumn(ft.Text("Spot")),
             ft.DataColumn(ft.Text("Prêmio Total")),
@@ -732,12 +735,17 @@ def build_screener_panel(page):
                 call_premio = _to_f(r.get("call_premio"))
                 put_premio = _to_f(r.get("put_premio"))
                 custo_oper = qty_call * call_premio + qty_put * put_premio
-                # Se os prêmios já consideram contrato de 100, ajuste aqui:
-                # custo_oper = (qty_call/100) * call_premio + (qty_put/100) * put_premio
 
-                # BE% mostrado: sempre com o mesmo spot_uni e BE↑
+                # --- %BE calculados SEMPRE contra o mesmo spot_uni ---
+                be_down_val = r.get("be_down")
                 be_up_val = r.get("be_up")
-                be_pct_show = ((be_up_val / spot_uni) - 1.0) * 100.0 if (spot_uni and be_up_val) else None
+                if spot_uni and spot_uni > 0:
+                    # preserva o sinal: %BE↓ negativo, %BE↑ positivo
+                    be_pct_down_show = ((be_down_val / spot_uni) - 1.0) * 100.0 if be_down_val is not None else None
+                    be_pct_up_show = ((be_up_val / spot_uni) - 1.0) * 100.0 if be_up_val is not None else None
+                else:
+                    be_pct_down_show = None
+                    be_pct_up_show = None
 
                 return ft.DataRow(
                     cells=[
@@ -745,9 +753,14 @@ def build_screener_panel(page):
                         ft.DataCell(ft.Text(call)),
                         ft.DataCell(ft.Text(put)),
                         ft.DataCell(ft.Text(_fmt2(r.get("strike")))),
-                        ft.DataCell(ft.Text(_fmt_pct(be_pct_show) if be_pct_show is not None else "")),
-                        ft.DataCell(ft.Text(_fmt2(r.get("be_down")))),
-                        ft.DataCell(ft.Text(_fmt2(r.get("be_up")))),
+
+                        # ATENÇÃO: ajuste os cabeçalhos para bater com a ordem abaixo
+                        # [%BE↓, BE↓, %BE↑, BE↑]
+                        ft.DataCell(ft.Text(_fmt_pct(be_pct_down_show) if be_pct_down_show is not None else "")),
+                        ft.DataCell(ft.Text(_fmt2(be_down_val))),
+                        ft.DataCell(ft.Text(_fmt_pct(be_pct_up_show) if be_pct_up_show is not None else "")),
+                        ft.DataCell(ft.Text(_fmt2(be_up_val))),
+
                         ft.DataCell(ft.Text(_fmt2(spot_uni))),
                         ft.DataCell(ft.Text(_fmt4(r.get("premium_total")))),
                         ft.DataCell(ft.Text(_fmt4(r.get("call_premio")))),
