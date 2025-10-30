@@ -45,9 +45,24 @@ def _pair_straddles(calls: List[Dict[str, Any]], puts: List[Dict[str, Any]]):
 
 def screener_ls_por_ticker_vencimento(ticker: str, due_date: str) -> dict[str, List[Dict[str, Any]]]:
     ops = buscar_opcoes_por_ticker_vencimento(ticker, due_date)
+
+    spot_candidates = [_to_float(o.get("spot_price")) for o in ops if _to_float(o.get("spot_price")) > 0]
+    spot_ref = spot_candidates[0] if spot_candidates else 0.0
+
     calls = [o for o in ops if (o.get("tipo") or "").upper().startswith("CALL")]
     puts  = [o for o in ops if (o.get("tipo") or "").upper().startswith("PUT")]
     pairs = _pair_straddles(calls, puts)
+
+    if spot_ref > 0 and pairs:
+        strikes = [_to_float(c.get("strike")) for (c, _) in pairs]
+        if strikes:
+            strike_atm = min(strikes, key=lambda s: abs(s - spot_ref))
+            pairs = [(c, p) for (c, p) in pairs if _to_float(c.get("strike")) == strike_atm]
+            if len(pairs) > 1:
+                def _liq(o): return int(o.get("volume") or 0) + int(o.get("open_interest") or 0)
+
+                pairs.sort(key=lambda cp: -(_liq(cp[0]) + _liq(cp[1])))
+                pairs = [pairs[0]]
 
     resultados = []
     for c, p in pairs:
