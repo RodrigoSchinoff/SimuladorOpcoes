@@ -550,12 +550,22 @@ def build_screener_panel(page):
             t = (tkr.value or "").strip().upper()
             total_lot = _parse_total_lot(lote_total_tf.value, default=10000)
 
+            # --- DEBUG START ---
+            import time, uuid
+            exec_id = f"SCR-{uuid.uuid4().hex[:6]}"
+            t0 = time.perf_counter()
+            print(f"[{exec_id}] START on_screener ticker={t}", flush=True)
+            # --- DEBUG END ---
+
             if not t:
                 status.value = "Informe o Ticker."
                 output.value = "⚠️ Informe o Ticker e clique em Rodar."
                 output.visible = True
                 table.rows = []
                 page.update()
+                # --- DEBUG ---
+                print(f"[{exec_id}] ABORT: ticker vazio; total={time.perf_counter() - t0:.3f}s", flush=True)
+                # --- DEBUG ---
                 return
 
             def _to_f(v):
@@ -583,8 +593,14 @@ def build_screener_panel(page):
             page.update()
 
             # screener ATM com refresh forçado
-            res = atualizar_e_screener_atm_2venc(t, refresh=True)
+            t1 = time.perf_counter()
+            print(f"[{exec_id}] BEFORE atualizar_e_screener_atm_2venc(refresh=True)", flush=True)
+            res = atualizar_e_screener_atm_2venc(t, refresh=False)
+            dt_repo = time.perf_counter() - t1
+            print(f"[{exec_id}] AFTER atualizar_e_screener_atm_2venc dt={dt_repo:.3f}s", flush=True)
+
             linhas = (res or {}).get("atm", [])
+            print(f"[{exec_id}] LINHAS_ATM={len(linhas)}", flush=True)
 
             # -------- SPOT ÚNICO (prioriza Oplab oficial) --------
             from services.api import get_spot_ativo_oficial
@@ -599,6 +615,7 @@ def build_screener_panel(page):
                 spot_uni = _to_f(linhas[0].get("spot"))
             spot_uni = _to_f(spot_uni) if spot_uni is not None else 0.0
             page.spot_override = spot_uni  # simulador também usa o mesmo spot
+            print(f"[{exec_id}] SPOT_UNI={spot_uni}", flush=True)
             # ------------------------------------------------------
 
             # ---------- Cálculo D+1 (simulação em memória) ----------
@@ -628,6 +645,7 @@ def build_screener_panel(page):
                 f = max(0.0, 1.0 - crush / 100.0)
                 r_aa = to_float(os.getenv("SELIC_AA", "10.0")) / 100.0
 
+                t_d1 = time.perf_counter()
                 for r in linhas:
                     call = r.get("call");
                     put = r.get("put")
@@ -674,6 +692,7 @@ def build_screener_panel(page):
                         # BE% será calculado de forma unificada no make_row a partir de spot_uni
                     except Exception:
                         continue
+                print(f"[{exec_id}] D+1 calc dt={time.perf_counter() - t_d1:.3f}s", flush=True)
             # ---------- Fim D+1 ----------
 
             if not linhas:
@@ -682,6 +701,9 @@ def build_screener_panel(page):
                 busy.visible = False
                 status.value = ""
                 page.update()
+                # --- DEBUG ---
+                print(f"[{exec_id}] NO_DATA total={time.perf_counter() - t0:.3f}s", flush=True)
+                # --- DEBUG ---
                 return
 
             def _round_lots(call_raw, put_raw, lot_min, total):
@@ -754,7 +776,6 @@ def build_screener_panel(page):
                         ft.DataCell(ft.Text(put)),
                         ft.DataCell(ft.Text(_fmt2(r.get("strike")))),
 
-                        # ATENÇÃO: ajuste os cabeçalhos para bater com a ordem abaixo
                         # [%BE↓, BE↓, %BE↑, BE↑]
                         ft.DataCell(ft.Text(_fmt_pct(be_pct_down_show) if be_pct_down_show is not None else "")),
                         ft.DataCell(ft.Text(_fmt2(be_down_val))),
@@ -776,6 +797,7 @@ def build_screener_panel(page):
                     on_select_changed=lambda e, c=call, p=put: on_row_select(e, c, p),
                 )
 
+            t_tbl = time.perf_counter()
             safe_rows = []
             for r in linhas:
                 try:
@@ -785,6 +807,7 @@ def build_screener_panel(page):
                 except Exception as ex:
                     print(f"[ROW] ignorada {r.get('call')}|{r.get('put')} -> {ex}", flush=True)
             table.rows = safe_rows
+            print(f"[{exec_id}] TABLE_BUILD rows={len(safe_rows)} dt={time.perf_counter() - t_tbl:.3f}s", flush=True)
 
             table.visible = True
 
@@ -814,11 +837,22 @@ def build_screener_panel(page):
             status.value = f"{len(linhas)} linhas ATM (2 vencimentos)."
             page.update()
 
+            # --- DEBUG ---
+            print(f"[{exec_id}] END on_screener total={time.perf_counter() - t0:.3f}s", flush=True)
+            # --- DEBUG ---
+
         except Exception as ex:
             busy.visible = False
             status.value = ""
             show_snack(page, f"Erro no screener ATM: {ex}")
             page.update()
+            # --- DEBUG ---
+            try:
+                import time
+                print(f"[{exec_id}] EXCEPT on_screener err={ex} total={time.perf_counter() - t0:.3f}s", flush=True)
+            except Exception:
+                pass
+            # --- DEBUG ---
 
     # <<-- AQUI TERMINA o try/except do on_screener -->>
 

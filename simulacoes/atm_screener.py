@@ -63,25 +63,41 @@ def _two_atm_strikes(ks: List[float], spot: float) -> List[float]:
 
 
 def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
+    # --- DEBUG ---
+    import time, uuid
+    sc_id = f"SC-{uuid.uuid4().hex[:6]}"
+    t0 = time.perf_counter()
+    print(f"[{sc_id}] START _pairs_for_due ticker={ticker} due={due_date}", flush=True)
+    # --- DEBUG ---
+
+    tq = time.perf_counter()
+    print(f"[{sc_id}] Q_BEFORE due={due_date}", flush=True)
     ops = buscar_opcoes_por_ticker_vencimento(ticker, due_date)
+    print(f"[{sc_id}] Q_AFTER due={due_date} dt={time.perf_counter()-tq:.3f}s rows={len(ops or [])}", flush=True)
+
     if not ops:
+        print(f"[{sc_id}] END _pairs_for_due due={due_date} total={time.perf_counter()-t0:.3f}s (no ops)", flush=True)
         return []
 
     # mesmo padrão já usado no ls_screener: campo normalizado "tipo"
+    tc = time.perf_counter()
     calls = [o for o in ops if (o.get("tipo") or "").upper().startswith("CALL")]
     puts  = [o for o in ops if (o.get("tipo") or "").upper().startswith("PUT")]
-
     spot = _spot_from_ops(ops)
-
     strikes_call = {round(_f(o.get("strike")), 6) for o in calls if _f(o.get("strike")) > 0}
     strikes_put  = {round(_f(o.get("strike")), 6) for o in puts  if _f(o.get("strike")) > 0}
     strikes = sorted(strikes_call & strikes_put)
+    print(f"[{sc_id}] PREP due={due_date} dt={time.perf_counter()-tc:.3f}s "
+          f"calls={len(calls)} puts={len(puts)} strikes={len(strikes)} spot={spot}", flush=True)
+
     if not strikes:
+        print(f"[{sc_id}] END _pairs_for_due due={due_date} total={time.perf_counter()-t0:.3f}s (no strikes)", flush=True)
         return []
 
     ks = _two_atm_strikes([float(k) for k in strikes], spot)
     out: List[Dict[str, Any]] = []
 
+    tcalc = time.perf_counter()
     for k in ks:
         cs = [o for o in calls if abs(_f(o.get("strike")) - k) < 1e-6]
         ps = [o for o in puts  if abs(_f(o.get("strike")) - k) < 1e-6]
@@ -89,17 +105,31 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
         if not c or not p:
             continue
 
-        # ----- prêmio por perna -----
         prem_call = _prem(c)
         prem_put  = _prem(p)
         prem = prem_call + prem_put
 
-        # params comuns
         dias   = int(c.get("days_to_maturity") or p.get("days_to_maturity") or 0)
         irate  = 0.0
         amount = int((c.get("contract_size") or p.get("contract_size") or 100) or 100)
 
-        # --- helpers de IV e BS local (rápido) ---
+        # --- DELTA (mantido igual; pode chamar cache/API) ---
+        import concurrent.futures as cf
+        from services.api_bs import bs_greeks
+        from repositories.bs_repo import get_cached_bs, upsert_bs
+        from math import log, sqrt, erf
+
+        def _norm_cdf(x: float) -> float:
+            return 0.5 * (1.0 + erf(x / sqrt(2.0)))
+
+        def _bs_delta_local(spot_, strike_, dias_, vol_, r_, is_call):
+            if spot_ <= 0 or strike_ <= 0 or vol_ <= 0 or dias_ <= 0:
+                return None
+            t = dias_ / 252.0
+            d1 = (log(spot_ / strike_) + (r_ + 0.5 * vol_ * vol_) * t) / (vol_ * sqrt(t))
+            nd1 = _norm_cdf(d1)
+            return nd1 if is_call else (nd1 - 1.0)
+
         def _iv(o: dict) -> float:
             for k_iv in ("iv", "implied_vol", "implied_volatility", "sigma"):
                 try:
@@ -110,46 +140,32 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
                     pass
             return 0.0
 
-        from math import log, sqrt, erf
-        def _norm_cdf(x: float) -> float:
-            return 0.5 * (1.0 + erf(x / sqrt(2.0)))
-
-        def _bs_delta_local(spot_: float, strike_: float, dias_: int, vol_: float, r_: float, is_call: bool):
-            # usa ano de 252 dias úteis; ajuste para 365 se preferir
-            if spot_ <= 0 or strike_ <= 0 or vol_ <= 0 or dias_ <= 0:
-                return None
-            t = dias_ / 252.0
-            d1 = (log(spot_ / strike_) + (r_ + 0.5 * vol_ * vol_) * t) / (vol_ * sqrt(t))
-            nd1 = _norm_cdf(d1)
-            return nd1 if is_call else (nd1 - 1.0)
-
-        vol_call = _iv(c)
-        vol_put  = _iv(p)
-
-        # --- DELTA via cache/API (canonização + paralelismo + local-first) ---
-        import concurrent.futures as cf
-        from services.api_bs import bs_greeks
-        from repositories.bs_repo import get_cached_bs, upsert_bs
+        vol_call = _iv(c); vol_put = _iv(p)
 
         def _canon(v, nd):
-            try:
-                return round(float(v), nd)
-            except Exception:
-                return None
+            try: return round(float(v), nd)
+            except Exception: return None
 
-        spot_c = _canon(spot, 2)  # chave estável p/ cache
+        spot_c = _canon(spot, 2)
 
         def _delta_for_leg(o: dict, kind: str, vol_in: float, prem_in: float):
-            # 0) tentativa local (se tivermos IV, é instantâneo)
+            # --- DEBUG ---
+            import time as _t
+            _t0 = _t.perf_counter()
+            # --- DEBUG ---
+
+            # 0) tentativa local (rápida, se houver IV)
             d_local = _bs_delta_local(spot, float(o.get("strike") or 0), dias, vol_in, irate, kind == "CALL")
             if d_local is not None:
+                print(f"[{sc_id}] LOCAL_DELTA kind={kind} strike={o.get('strike')} dt={_t.perf_counter() - _t0:.3f}s",
+                      flush=True)
                 return d_local
 
-            # 1) tenta cache (TTL 60 min) com chaves canonizadas
+            # 1) cache (TTL 60 min) com chaves canônicas
             params = dict(
                 symbol=o.get("symbol"),
                 due_date=due_date,
-                kind=kind,                       # "CALL" | "PUT"
+                kind=kind,  # "CALL" | "PUT"
                 spotprice=_canon(spot_c, 2),
                 strike=_canon(o.get("strike"), 2),
                 premium=_canon(prem_in, 4),
@@ -161,42 +177,45 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
             cached = get_cached_bs(**params, ttl_minutes=60)
             if cached and cached.get("delta") is not None:
                 try:
-                    return float(cached["delta"])
+                    val = float(cached["delta"])
+                    print(
+                        f"[{sc_id}] CACHE_HIT kind={kind} strike={params['strike']} dt={_t.perf_counter() - _t0:.3f}s",
+                        flush=True)
+                    return val
                 except Exception:
                     pass
 
-            # 2) chama API (timeout curto) e grava com os mesmos valores canônicos
+            # 2) API (diagnóstico de latência)
+            _api_t0 = _t.perf_counter()
+            print(f"[{sc_id}] API_CALL kind={kind} strike={params['strike']}", flush=True)
             try:
-                resp = bs_greeks(**params, timeout=3)
-                # alinhar valores retornados com a chave
+                resp = bs_greeks(**params, timeout=3)  # timeout atual
+                # alinhar e persistir no cache
                 resp["spotprice"] = params["spotprice"]
-                resp["strike"]    = params["strike"]
-                resp["premium"]   = params["premium"]
-                resp["vol"]       = params["vol"]
-                resp["dtm"]       = params["dtm"]
+                resp["strike"] = params["strike"]
+                resp["premium"] = params["premium"]
+                resp["vol"] = params["vol"]
+                resp["dtm"] = params["dtm"]
                 upsert_bs(
                     resp=resp,
                     symbol=params["symbol"], due_date=params["due_date"], kind=params["kind"],
                     irate=params["irate"], premium=params["premium"], dtm=params["dtm"],
                     vol=params["vol"], amount=params["amount"]
                 )
-                return float(resp.get("delta")) if resp.get("delta") is not None else None
+                val = float(resp.get("delta")) if resp.get("delta") is not None else None
+                print(f"[{sc_id}] API_DONE kind={kind} dt={_t.perf_counter() - _api_t0:.3f}s", flush=True)
+                return val
             except Exception:
+                print(f"[{sc_id}] API_FAIL kind={kind} dt={_t.perf_counter() - _api_t0:.3f}s", flush=True)
                 return None
 
-        # paraleliza a obtenção dos deltas da CALL e da PUT
         with cf.ThreadPoolExecutor(max_workers=2) as ex:
             f_c = ex.submit(_delta_for_leg, c, "CALL", vol_call, prem_call)
             f_p = ex.submit(_delta_for_leg, p, "PUT",  vol_put,  prem_put)
-            try:
-                d_call = f_c.result(timeout=5)
-            except Exception:
-                d_call = None
-            try:
-                d_put  = f_p.result(timeout=5)
-            except Exception:
-                d_put = None
-        # --- FIM BLOCO DELTA ---
+            try: d_call = f_c.result(timeout=5)
+            except Exception: d_call = None
+            try: d_put  = f_p.result(timeout=5)
+            except Exception: d_put  = None
 
         csz = amount
         be_d = round(k - prem, 2)
@@ -210,22 +229,28 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
             "due_date": due_date,
             "strike": float(k),
             "spot": spot,
-
             "premium_total": round(prem, 4),
             "premium_contrato": round(prem * csz, 2),
             "contract_size": csz,
             "be_down": be_d, "be_up": be_u, "be_pct": be_pct,
-
             "call_premio": round(prem_call, 4),
             "put_premio":  round(prem_put,  4),
             "call_delta":  None if d_call is None else round(d_call, 4),
             "put_delta":   None if d_put  is None else round(d_put,  4),
         })
 
+    print(f"[{sc_id}] CALC due={due_date} dt={time.perf_counter()-tcalc:.3f}s", flush=True)
+    print(f"[{sc_id}] END _pairs_for_due due={due_date} total={time.perf_counter()-t0:.3f}s out={len(out)}", flush=True)
     return out
 
 
 def screener_atm_dois_vencimentos(ticker: str, hoje: Optional[date] = None) -> Dict[str, List[Dict[str, Any]]]:
+    # --- DEBUG ---
+    import time, uuid
+    sc_id_all = f"SC-{uuid.uuid4().hex[:6]}"
+    t0 = time.perf_counter()
+    # --- DEBUG ---
+
     """
     Retorna somente as 2 linhas ATM (1 strike abaixo e 1 acima) para cada
     um dos 2 próximos vencimentos (terceira sexta-feira).
@@ -235,9 +260,18 @@ def screener_atm_dois_vencimentos(ticker: str, hoje: Optional[date] = None) -> D
     v1, v2 = _next_two_third_fridays(hoje)
     ds = [v1.strftime("%Y-%m-%d"), v2.strftime("%Y-%m-%d")]
 
+    print(f"[{sc_id_all}] START screener_atm_dois_vencimentos ticker={ticker} ds={ds}", flush=True)
+
     linhas: List[Dict[str, Any]] = []
     for d in ds:
-        linhas.extend(_pairs_for_due(ticker, d))
+        tp = time.perf_counter()
+        pares = _pairs_for_due(ticker, d)
+        print(f"[{sc_id_all}] DUE_AGG due={d} dt={time.perf_counter()-tp:.3f}s pairs={len(pares)}", flush=True)
+        linhas.extend(pares)
 
+    ts = time.perf_counter()
     linhas.sort(key=lambda r: (r["due_date"], abs(_f(r.get("strike")) - _f(r.get("spot")))))
+    print(f"[{sc_id_all}] SORT dt={time.perf_counter()-ts:.3f}s", flush=True)
+
+    print(f"[{sc_id_all}] END screener total={time.perf_counter()-t0:.3f}s linhas={len(linhas)}", flush=True)
     return {"atm": linhas, "due_dates": ds}
