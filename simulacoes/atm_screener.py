@@ -149,65 +149,78 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
         spot_c = _canon(spot, 2)
 
         def _delta_for_leg(o: dict, kind: str, vol_in: float, prem_in: float):
-            # --- DEBUG ---
-            import time as _t
-            _t0 = _t.perf_counter()
-            # --- DEBUG ---
+            import os
 
-            # 0) tentativa local (rápida, se houver IV)
-            d_local = _bs_delta_local(spot, float(o.get("strike") or 0), dias, vol_in, irate, kind == "CALL")
-            if d_local is not None:
-                print(f"[{sc_id}] LOCAL_DELTA kind={kind} strike={o.get('strike')} dt={_t.perf_counter() - _t0:.3f}s",
-                      flush=True)
-                return d_local
-
-            # 1) cache (TTL 60 min) com chaves canônicas
-            params = dict(
-                symbol=o.get("symbol"),
-                due_date=due_date,
-                kind=kind,  # "CALL" | "PUT"
-                spotprice=_canon(spot_c, 2),
-                strike=_canon(o.get("strike"), 2),
-                premium=_canon(prem_in, 4),
-                dtm=int(dias),
-                vol=_canon(vol_in, 4),
-                irate=irate,
-                amount=amount,
+            # 0) caminho local (instantâneo) — usa IV se existir
+            d_local = _bs_delta_local(
+                spot,
+                float(o.get("strike") or 0),
+                dias,
+                vol_in,
+                irate,
+                kind == "CALL",
             )
-            cached = get_cached_bs(**params, ttl_minutes=60)
-            if cached and cached.get("delta") is not None:
+            if d_local is not None:
+                # log opcional (silencie se quiser)
                 try:
-                    val = float(cached["delta"])
-                    print(
-                        f"[{sc_id}] CACHE_HIT kind={kind} strike={params['strike']} dt={_t.perf_counter() - _t0:.3f}s",
-                        flush=True)
-                    return val
+                    if LOG_DEBUG:
+                        print(f"[{sc_id}] LOCAL_DELTA kind={kind} strike={o.get('strike')}", flush=True)
                 except Exception:
                     pass
+                return d_local
 
-            # 2) API (diagnóstico de latência)
-            _api_t0 = _t.perf_counter()
-            print(f"[{sc_id}] API_CALL kind={kind} strike={params['strike']}", flush=True)
-            try:
-                resp = bs_greeks(**params, timeout=3)  # timeout atual
-                # alinhar e persistir no cache
-                resp["spotprice"] = params["spotprice"]
-                resp["strike"] = params["strike"]
-                resp["premium"] = params["premium"]
-                resp["vol"] = params["vol"]
-                resp["dtm"] = params["dtm"]
-                upsert_bs(
-                    resp=resp,
-                    symbol=params["symbol"], due_date=params["due_date"], kind=params["kind"],
-                    irate=params["irate"], premium=params["premium"], dtm=params["dtm"],
-                    vol=params["vol"], amount=params["amount"]
-                )
-                val = float(resp.get("delta")) if resp.get("delta") is not None else None
-                print(f"[{sc_id}] API_DONE kind={kind} dt={_t.perf_counter() - _api_t0:.3f}s", flush=True)
-                return val
-            except Exception:
-                print(f"[{sc_id}] API_FAIL kind={kind} dt={_t.perf_counter() - _api_t0:.3f}s", flush=True)
-                return None
+            # 1) POR PADRÃO, NÃO usa rede no screener (evita ~1.4s por hit no Render)
+            #    Se quiser reabilitar cache/API em produção, defina SCREENER_USE_REMOTE_DELTA=1
+            if os.getenv("SCREENER_USE_REMOTE_DELTA", "0") == "1":
+                try:
+                    # imports só quando habilitado (evita custo e dependência quando OFF)
+                    from repositories.bs_repo import get_cached_bs, upsert_bs
+                    from services.api_bs import bs_greeks
+
+                    def _canon(v, nd):
+                        try:
+                            return round(float(v), nd)
+                        except Exception:
+                            return None
+
+                    spot_c = _canon(spot, 2)
+                    params = dict(
+                        symbol=o.get("symbol"),
+                        due_date=due_date,
+                        kind=kind,
+                        spotprice=spot_c,
+                        strike=_canon(o.get("strike"), 2),
+                        premium=_canon(prem_in, 4),
+                        dtm=int(dias),
+                        vol=_canon(vol_in, 4),
+                        irate=irate,
+                        amount=amount,
+                    )
+
+                    cached = get_cached_bs(**params, ttl_minutes=60)
+                    if cached and cached.get("delta") is not None:
+                        return float(cached["delta"])
+
+                    # fallback API (timeout curto)
+                    resp = bs_greeks(**params, timeout=2)
+                    # alinhar e cachear
+                    resp["spotprice"] = params["spotprice"]
+                    resp["strike"] = params["strike"]
+                    resp["premium"] = params["premium"]
+                    resp["vol"] = params["vol"]
+                    resp["dtm"] = params["dtm"]
+                    upsert_bs(
+                        resp=resp,
+                        symbol=params["symbol"], due_date=params["due_date"], kind=params["kind"],
+                        irate=params["irate"], premium=params["premium"], dtm=params["dtm"],
+                        vol=params["vol"], amount=params["amount"]
+                    )
+                    return float(resp.get("delta")) if resp.get("delta") is not None else None
+                except Exception:
+                    return None
+
+            # 2) Sem IV local e com rede desligada: usa fallback (peso igual já tratado depois)
+            return None
 
         with cf.ThreadPoolExecutor(max_workers=2) as ex:
             f_c = ex.submit(_delta_for_leg, c, "CALL", vol_call, prem_call)
