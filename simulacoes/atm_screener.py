@@ -83,7 +83,15 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
     tc = time.perf_counter()
     calls = [o for o in ops if (o.get("tipo") or "").upper().startswith("CALL")]
     puts  = [o for o in ops if (o.get("tipo") or "").upper().startswith("PUT")]
-    spot = _spot_from_ops(ops)
+
+    from services.api import get_spot_ativo_oficial
+    try:
+        spot_ofc = float(get_spot_ativo_oficial(ticker))
+    except Exception:
+        spot_ofc = 0.0
+    spot = spot_ofc if spot_ofc > 0 else _spot_from_ops(ops)
+    spot = round(float(spot), 2)
+
     strikes_call = {round(_f(o.get("strike")), 6) for o in calls if _f(o.get("strike")) > 0}
     strikes_put  = {round(_f(o.get("strike")), 6) for o in puts  if _f(o.get("strike")) > 0}
     strikes = sorted(strikes_call & strikes_put)
