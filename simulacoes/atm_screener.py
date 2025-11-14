@@ -5,6 +5,7 @@ import calendar
 
 from repositories.opcoes_repo import buscar_opcoes_por_ticker_vencimento
 from simulacoes.utils import extrair_float as _f, preco_compra_premio as _prem
+from services.api import get_spot_ativo_oficial  # <- usa a função do módulo services.api
 
 
 def _third_friday(d: date) -> date:
@@ -25,6 +26,10 @@ def _next_two_third_fridays(today: date) -> Tuple[date, date]:
 
 
 def _spot_from_ops(ops: List[Dict[str, Any]], fallback: float = 0.0) -> float:
+    """
+    Fallback de spot: tenta usar campo spot_price; se não, mediana dos strikes.
+    Usado apenas quando não conseguir pegar o spot oficial.
+    """
     for o in ops:
         sp = _f(o.get("spot_price"))
         if sp > 0:
@@ -48,17 +53,45 @@ def _choose_leg(legs: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
 
 
 def _two_atm_strikes(ks: List[float], spot: float) -> List[float]:
+    """
+    Regra:
+    - sempre 1 strike abaixo do spot
+    - sempre 1 strike acima do spot
+    - se não houver abaixo, usa o menor strike
+    - se não houver acima, usa o maior strike
+    """
     if not ks:
         return []
+
     ks = sorted(set([round(k, 2) for k in ks if k > 0]))
-    below = [k for k in ks if k <= spot]
-    above = [k for k in ks if k >= spot]
-    k_down = max(below, default=ks[0])
-    k_up = min(above, default=ks[-1])
+
+    # abaixo = estritamente menores que o spot
+    below = [k for k in ks if k < spot]
+    # acima  = estritamente maiores que o spot
+    above = [k for k in ks if k > spot]
+
+    # 1) garantir strike abaixo
+    if below:
+        k_down = max(below)
+    else:
+        # se não tiver nada abaixo, pega o menor disponível
+        k_down = ks[0]
+
+    # 2) garantir strike acima
+    if above:
+        k_up = min(above)
+    else:
+        # se não tiver nada acima, pega o maior disponível
+        k_up = ks[-1]
+
+    # 3) se por acaso ainda forem iguais, ajusta pros vizinhos
     if k_down == k_up:
         idx = ks.index(k_up)
-        k_down = ks[idx - 1] if idx > 0 else ks[0]
-        k_up = ks[idx + 1] if idx < len(ks) - 1 else ks[-1]
+        if idx > 0:
+            k_down = ks[idx - 1]
+        if idx < len(ks) - 1:
+            k_up = ks[idx + 1]
+
     return [k_down, k_up]
 
 
@@ -84,19 +117,27 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
     calls = [o for o in ops if (o.get("tipo") or "").upper().startswith("CALL")]
     puts  = [o for o in ops if (o.get("tipo") or "").upper().startswith("PUT")]
 
-    from services.api import get_spot_ativo_oficial
+    # 1) tenta usar o SPOT OFICIAL (Oplab) via services.api
     try:
-        spot_ofc = float(get_spot_ativo_oficial(ticker))
+        spot_oficial = float(get_spot_ativo_oficial(ticker) or 0.0)
     except Exception:
-        spot_ofc = 0.0
-    spot = spot_ofc if spot_ofc > 0 else _spot_from_ops(ops)
-    spot = round(float(spot), 2)
+        spot_oficial = 0.0
+
+    # 2) fallback: spot derivado das opções
+    if spot_oficial > 0:
+        spot = spot_oficial
+    else:
+        spot = _spot_from_ops(ops)
 
     strikes_call = {round(_f(o.get("strike")), 6) for o in calls if _f(o.get("strike")) > 0}
     strikes_put  = {round(_f(o.get("strike")), 6) for o in puts  if _f(o.get("strike")) > 0}
     strikes = sorted(strikes_call & strikes_put)
-    print(f"[{sc_id}] PREP due={due_date} dt={time.perf_counter()-tc:.3f}s "
-          f"calls={len(calls)} puts={len(puts)} strikes={len(strikes)} spot={spot}", flush=True)
+    print(
+        f"[{sc_id}] PREP due={due_date} dt={time.perf_counter()-tc:.3f}s "
+        f"calls={len(calls)} puts={len(puts)} strikes={len(strikes)} "
+        f"spot={spot} spot_oficial={spot_oficial}",
+        flush=True,
+    )
 
     if not strikes:
         print(f"[{sc_id}] END _pairs_for_due due={due_date} total={time.perf_counter()-t0:.3f}s (no strikes)", flush=True)
@@ -121,7 +162,7 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
         irate  = 0.0
         amount = int((c.get("contract_size") or p.get("contract_size") or 100) or 100)
 
-        # --- DELTA (mantido igual; pode chamar cache/API) ---
+        # --- BLOCO DELTA (local + cache + API) ---
         import concurrent.futures as cf
         from services.api_bs import bs_greeks
         from repositories.bs_repo import get_cached_bs, upsert_bs
@@ -148,18 +189,19 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
                     pass
             return 0.0
 
-        vol_call = _iv(c); vol_put = _iv(p)
+        vol_call = _iv(c)
+        vol_put  = _iv(p)
 
         def _canon(v, nd):
-            try: return round(float(v), nd)
-            except Exception: return None
+            try:
+                return round(float(v), nd)
+            except Exception:
+                return None
 
         spot_c = _canon(spot, 2)
 
         def _delta_for_leg(o: dict, kind: str, vol_in: float, prem_in: float):
-            import os
-
-            # 0) caminho local (instantâneo) — usa IV se existir
+            # 0) tentativa local (instantânea, se tiver IV)
             d_local = _bs_delta_local(
                 spot,
                 float(o.get("strike") or 0),
@@ -169,7 +211,6 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
                 kind == "CALL",
             )
             if d_local is not None:
-                # log opcional (silencie se quiser)
                 try:
                     if LOG_DEBUG:
                         print(f"[{sc_id}] LOCAL_DELTA kind={kind} strike={o.get('strike')}", flush=True)
@@ -177,66 +218,59 @@ def _pairs_for_due(ticker: str, due_date: str) -> List[Dict[str, Any]]:
                     pass
                 return d_local
 
-            # 1) POR PADRÃO, NÃO usa rede no screener (evita ~1.4s por hit no Render)
-            #    Se quiser reabilitar cache/API em produção, defina SCREENER_USE_REMOTE_DELTA=1
-            if os.getenv("SCREENER_USE_REMOTE_DELTA", "0") == "1":
-                try:
-                    # imports só quando habilitado (evita custo e dependência quando OFF)
-                    from repositories.bs_repo import get_cached_bs, upsert_bs
-                    from services.api_bs import bs_greeks
+            # 1) cache + API (sempre que o local não resolver)
+            params = dict(
+                symbol=o.get("symbol"),
+                due_date=due_date,
+                kind=kind,
+                spotprice=spot_c,
+                strike=_canon(o.get("strike"), 2),
+                premium=_canon(prem_in, 4),
+                dtm=int(dias),
+                vol=_canon(vol_in, 4),
+                irate=irate,
+                amount=amount,
+            )
 
-                    def _canon(v, nd):
-                        try:
-                            return round(float(v), nd)
-                        except Exception:
-                            return None
+            # cache
+            try:
+                cached = get_cached_bs(**params, ttl_minutes=60)
+                if cached and cached.get("delta") is not None:
+                    return float(cached["delta"])
+            except Exception:
+                pass
 
-                    spot_c = _canon(spot, 2)
-                    params = dict(
-                        symbol=o.get("symbol"),
-                        due_date=due_date,
-                        kind=kind,
-                        spotprice=spot_c,
-                        strike=_canon(o.get("strike"), 2),
-                        premium=_canon(prem_in, 4),
-                        dtm=int(dias),
-                        vol=_canon(vol_in, 4),
-                        irate=irate,
-                        amount=amount,
-                    )
+            # API
+            try:
+                resp = bs_greeks(**params, timeout=3)
+                resp["spotprice"] = params["spotprice"]
+                resp["strike"]    = params["strike"]
+                resp["premium"]   = params["premium"]
+                resp["vol"]       = params["vol"]
+                resp["dtm"]       = params["dtm"]
 
-                    cached = get_cached_bs(**params, ttl_minutes=60)
-                    if cached and cached.get("delta") is not None:
-                        return float(cached["delta"])
-
-                    # fallback API (timeout curto)
-                    resp = bs_greeks(**params, timeout=2)
-                    # alinhar e cachear
-                    resp["spotprice"] = params["spotprice"]
-                    resp["strike"] = params["strike"]
-                    resp["premium"] = params["premium"]
-                    resp["vol"] = params["vol"]
-                    resp["dtm"] = params["dtm"]
-                    upsert_bs(
-                        resp=resp,
-                        symbol=params["symbol"], due_date=params["due_date"], kind=params["kind"],
-                        irate=params["irate"], premium=params["premium"], dtm=params["dtm"],
-                        vol=params["vol"], amount=params["amount"]
-                    )
-                    return float(resp.get("delta")) if resp.get("delta") is not None else None
-                except Exception:
-                    return None
-
-            # 2) Sem IV local e com rede desligada: usa fallback (peso igual já tratado depois)
-            return None
+                upsert_bs(
+                    resp=resp,
+                    symbol=params["symbol"], due_date=params["due_date"], kind=params["kind"],
+                    irate=params["irate"], premium=params["premium"], dtm=params["dtm"],
+                    vol=params["vol"], amount=params["amount"],
+                )
+                return float(resp.get("delta")) if resp.get("delta") is not None else None
+            except Exception:
+                return None
+        # --- FIM BLOCO DELTA ---
 
         with cf.ThreadPoolExecutor(max_workers=2) as ex:
             f_c = ex.submit(_delta_for_leg, c, "CALL", vol_call, prem_call)
             f_p = ex.submit(_delta_for_leg, p, "PUT",  vol_put,  prem_put)
-            try: d_call = f_c.result(timeout=5)
-            except Exception: d_call = None
-            try: d_put  = f_p.result(timeout=5)
-            except Exception: d_put  = None
+            try:
+                d_call = f_c.result(timeout=5)
+            except Exception:
+                d_call = None
+            try:
+                d_put  = f_p.result(timeout=5)
+            except Exception:
+                d_put  = None
 
         csz = amount
         be_d = round(k - prem, 2)
