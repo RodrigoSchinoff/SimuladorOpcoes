@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Long Straddle</title>
+    <style>
+        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        th, td {
+            padding: 4px 6px;
+            text-align: right;
+            border-bottom: 1px solid #dddddd; /* só linha horizontal, sem verticais */
+        }
+        th:first-child, td:first-child,
+        th:nth-child(2), td:nth-child(2),
+        th:nth-child(3), td:nth-child(3) {
+            text-align: left;
+        }
+        tr:nth-child(even) { background-color: #fafafa; } /* linhas alternadas suaves */
+        h1 { font-size: 22px; }
+        form label { margin-left: 8px; }
+    </style>
+    <script>
+        function toggleCrush() {
+            var sel = document.getElementById('horizonte');
+            var crush = document.getElementById('crush_iv');
+            if (sel.value === 'D+1') {
+                crush.disabled = false;
+            } else {
+                crush.disabled = true;
+            }
+        }
+        window.addEventListener('load', toggleCrush);
+
+        function showLoading() {
+            var div = document.getElementById('loading');
+            if (div) div.style.display = 'block';
+        }
+    </script>
+</head>
+<body>
+<h1>Long Straddle</h1>
+
+<form method="GET" onsubmit="showLoading()">
+    <label>Ativo:</label>
+    <input type="text" name="ativo" placeholder="ex: PETR4" value="{{ ativo }}" required>
+
+    <label>Lote total:</label>
+    <input type="number" name="lote_total" value="{{ lote_total }}" step="100" min="100">
+
+    <label>Horizonte:</label>
+    <select name="horizonte" id="horizonte" onchange="toggleCrush()">
+        <option value="Vencimento" {% if horizonte == "Vencimento" %}selected{% endif %}>Vencimento</option>
+        <option value="D+1" {% if horizonte == "D+1" %}selected{% endif %}>D+1</option>
+    </select>
+
+    <label>Crush IV (%):</label>
+    <input type="number" name="crush_iv" id="crush_iv" value="{{ crush_iv }}" step="1">
+
+    <button type="submit">Buscar opções</button>
+</form>
+
+<div id="loading" style="display:none; margin-top:10px;">
+    <b>Carregando simulação...</b>
+</div>
+
+<hr>
+
+{% if erro %}
+    <p style="color: red;"><b>Erro:</b> {{ erro }}</p>
+{% endif %}
+
+{% if aviso_horizonte %}
+    <p style="color: orange;"><i>{{ aviso_horizonte }}</i></p>
+{% endif %}
+
+{% if resultado and linhas_screener %}
+    {% if spot_oficial %}
+        <p><b>Spot oficial:</b> {{ spot_oficial }}</p>
+    {% endif %}
+
+    <table>
+        <tr>
+            <th>Moneyness</th>
+            <th>CALL</th>
+            <th>PUT</th>
+            <th>Strike</th>
+            <th>%BE↓</th>
+            <th>BE↓</th>
+            <th>%BE↑</th>
+            <th>BE↑</th>
+            <th>Spot</th>
+            <th>Prêmio Total</th>
+            <th>Prêmio CALL</th>
+            <th>Δ CALL</th>
+            <th>Prêmio PUT</th>
+            <th>Δ PUT</th>
+            <th>Vencimento</th>
+            <th>Lote CALL</th>
+            <th>Lote PUT</th>
+            <th>Custo Operação</th>
+        </tr>
+        {% for linha in linhas_screener %}
+            <tr>
+                <td>ATM</td>
+                <td>{{ linha.call }}</td>
+                <td>{{ linha.put }}</td>
+                <td>{{ linha.strike }}</td>
+                <td>
+                    {% if linha.be_pct_down is not None %}
+                        {{ linha.be_pct_down|floatformat:2 }}%
+                    {% endif %}
+                </td>
+                <td>{{ linha.be_down }}</td>
+                <td>
+                    {% if linha.be_pct_up is not None %}
+                        {{ linha.be_pct_up|floatformat:2 }}%
+                    {% endif %}
+                </td>
+                <td>{{ linha.be_up }}</td>
+                <td>{{ linha.spot }}</td>
+                <td>{{ linha.premium_total }}</td>
+                <td>{{ linha.call_premio }}</td>
+                <td>{{ linha.call_delta }}</td>
+                <td>{{ linha.put_premio }}</td>
+                <td>{{ linha.put_delta }}</td>
+                <td>{{ linha.due_date }}</td>
+                <td>{{ linha.qty_call }}</td>
+                <td>{{ linha.qty_put }}</td>
+                <td>{{ linha.custo_operacao }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+
+{% else %}
+    {% if not erro %}
+        <p>Informe os parâmetros acima e clique em "Buscar opções" para listar os pares ATM.</p>
+    {% endif %}
+{% endif %}
+</body>
+</html>
