@@ -11,8 +11,9 @@ ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "0.0.0.0",
-    "ls.onrender.com",
+    "ls-v5oh.onrender.com",
 ]
+
 
 
 INSTALLED_APPS = [
@@ -24,8 +25,9 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 
     # App do simulador web
-    "ls-v5oh.onrender.com",
+    "simulador_web",
 ]
+
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
