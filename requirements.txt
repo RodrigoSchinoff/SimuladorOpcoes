@@ -1,4 +1,19 @@
-flet==0.28.3
-psycopg2-binary==2.9.10
+Django>=5.0
+gunicorn
+
+# HTTP
 requests>=2.31.0,<3
+
+# Banco de dados
+psycopg2-binary==2.9.10
+
+# Flet (MVP desktop ainda funciona)
+flet==0.28.3
+
+# Matemática e cálculos do simulador
+numpy
+pandas
+scipy
+
+# Gráficos (caso o payoff use)
 matplotlib>=3.8,<4
