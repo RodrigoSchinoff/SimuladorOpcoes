@@ -15,26 +15,45 @@ def atualizar_e_screener_ls(ticker: str, due_date: str) -> dict:
 
 
 # --- [ATM] Screener 2 próximos vencimentos (terceira sexta) ---
+# Cache em memória do resultado do screener (por ticker + 2 vencimentos)
+_screener_cache = {}  # key: (ticker, v1, v2) -> {"ts": epoch_seconds, "data": dict}
+
+
 def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
+    """
+    Atualiza (se precisar) o DB de opções e roda o screener ATM para os 2 próximos vencimentos.
+    Agora com cache em memória do resultado do screener, respeitando TTL.
+    """
     from datetime import date
     import calendar, os
+    import time
+    import uuid
 
     from simulacoes.atm_screener import screener_atm_dois_vencimentos
     from db.conexao import conectar
     from repositories.opcoes_repo import precisa_refresh_por_data, tentar_lock_ticker, liberar_lock_ticker
     from services.api import buscar_opcoes_ativo  # payload de opções (fallback p/ spot)
 
-    # === TTL central (evita refresh constante) ===
+    # === TTL central (evita refresh constante do DB) ===
     try:
         ttl_min = int(os.getenv("TTL_SCREENER_MIN", "10"))  # ajuste via env se quiser
     except Exception:
         ttl_min = 10
 
+    # === TTL do cache do RESULTADO do screener (em memória) ===
+    try:
+        result_ttl_min = int(os.getenv("TTL_SCREENER_RESULT_MIN", "5"))
+    except Exception:
+        result_ttl_min = 5
+
     # --- DEBUG: início ---
-    import time, uuid
     exec_id = f"AC-{uuid.uuid4().hex[:6]}"
     t0 = time.perf_counter()
-    print(f"[{exec_id}] START atualizar_e_screener_atm_2venc ticker={ticker} refresh={refresh} ttl_min={ttl_min}", flush=True)
+    print(
+        f"[{exec_id}] START atualizar_e_screener_atm_2venc "
+        f"ticker={ticker} refresh={refresh} ttl_min={ttl_min} result_ttl_min={result_ttl_min}",
+        flush=True,
+    )
     # --- DEBUG: fim ---
 
     # -------- helpers --------
@@ -58,8 +77,11 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
                 return None
             if ts:
                 tmax = max(ts)
-                xs_tmax = [float(r["spot_price"]) for r in lista
-                           if isinstance(r, dict) and r.get("spot_price") is not None and r.get("time") == tmax]
+                xs_tmax = [
+                    float(r["spot_price"])
+                    for r in lista
+                    if isinstance(r, dict) and r.get("spot_price") is not None and r.get("time") == tmax
+                ]
                 if xs_tmax:
                     xs = xs_tmax
             xs.sort()
@@ -72,6 +94,7 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
     def _spot_preferir_bs(tkr: str, payload_opcoes) -> float | None:
         try:
             from services.api import get_spot_ativo_bs
+
             v = float(get_spot_ativo_bs(tkr))
             if v > 0:
                 return round(v, 2)
@@ -79,6 +102,7 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
             pass
         try:
             from services.api import spot_ativo_bs
+
             v = float(spot_ativo_bs(tkr))
             if v > 0:
                 return round(v, 2)
@@ -86,6 +110,7 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
             pass
         try:
             from services.api import black_scholes_spot
+
             v = float(black_scholes_spot(tkr))
             if v > 0:
                 return round(v, 2)
@@ -115,12 +140,36 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
     ds = [v1.strftime("%Y-%m-%d"), v2.strftime("%Y-%m-%d")]
     print(f"[{exec_id}] DATES_ALIGNED {ds}", flush=True)
 
-    # === TTL + LOCK por vencimento ===
+    # === TTL + LOCK por vencimento (DB) ===
     t_need = time.perf_counter()
-    need_v1 = (True if refresh else precisa_refresh_por_data(ticker, ds[0], max_age_minutes=ttl_min))
-    need_v2 = (True if refresh else precisa_refresh_por_data(ticker, ds[1], max_age_minutes=ttl_min))
-    print(f"[{exec_id}] NEED_REFRESH v1={need_v1} v2={need_v2} dt={time.perf_counter()-t_need:.3f}s", flush=True)
+    need_v1 = True if refresh else precisa_refresh_por_data(ticker, ds[0], max_age_minutes=ttl_min)
+    need_v2 = True if refresh else precisa_refresh_por_data(ticker, ds[1], max_age_minutes=ttl_min)
+    print(
+        f"[{exec_id}] NEED_REFRESH v1={need_v1} v2={need_v2} dt={time.perf_counter()-t_need:.3f}s",
+        flush=True,
+    )
 
+    # === CACHE DO RESULTADO DO SCREENER ===
+    global _screener_cache
+    cache_key = (ticker.upper().strip(), ds[0], ds[1])
+    now_ts = time.time()
+
+    if not refresh and not need_v1 and not need_v2 and result_ttl_min > 0:
+        cached = _screener_cache.get(cache_key)
+        if cached:
+            age_sec = now_ts - cached["ts"]
+            if age_sec <= result_ttl_min * 60:
+                print(
+                    f"[{exec_id}] CACHE_HIT_SCREENER key={cache_key} age={age_sec:.1f}s",
+                    flush=True,
+                )
+                print(
+                    f"[{exec_id}] END atualizar_e_screener_atm_2venc total={time.perf_counter()-t0:.3f}s (from cache)",
+                    flush=True,
+                )
+                return cached["data"]
+
+    # === SE PRECISAR, ATUALIZA DB (mantém sua lógica atual) ===
     if need_v1 or need_v2:
         t_lock = time.perf_counter()
         _conn_lock = conectar()
@@ -135,18 +184,29 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
                         updated_any = False
                         if need_v1:
                             t_u1 = time.perf_counter()
-                            inserir_opcoes_do_ativo(ticker, so_vencimento=ds[0]); updated_any = True
-                            print(f"[{exec_id}] UPDATE_V1 done dt={time.perf_counter()-t_u1:.3f}s", flush=True)
+                            inserir_opcoes_do_ativo(ticker, so_vencimento=ds[0])
+                            updated_any = True
+                            print(
+                                f"[{exec_id}] UPDATE_V1 done dt={time.perf_counter()-t_u1:.3f}s",
+                                flush=True,
+                            )
                         if need_v2:
                             t_u2 = time.perf_counter()
-                            inserir_opcoes_do_ativo(ticker, so_vencimento=ds[1]); updated_any = True
-                            print(f"[{exec_id}] UPDATE_V2 done dt={time.perf_counter()-t_u2:.3f}s", flush=True)
+                            inserir_opcoes_do_ativo(ticker, so_vencimento=ds[1])
+                            updated_any = True
+                            print(
+                                f"[{exec_id}] UPDATE_V2 done dt={time.perf_counter()-t_u2:.3f}s",
+                                flush=True,
+                            )
 
                         if updated_any:
                             t_payload = time.perf_counter()
                             payload = buscar_opcoes_ativo(ticker.upper().strip())
                             spot_new = _spot_preferir_bs(ticker.upper().strip(), payload)
-                            print(f"[{exec_id}] PAYLOAD+SPOT spot_new={spot_new} dt={time.perf_counter()-t_payload:.3f}s", flush=True)
+                            print(
+                                f"[{exec_id}] PAYLOAD+SPOT spot_new={spot_new} dt={time.perf_counter()-t_payload:.3f}s",
+                                flush=True,
+                            )
 
                             if spot_new is not None:
                                 t_upd = time.perf_counter()
@@ -161,7 +221,10 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
                                         (spot_new, ticker),
                                     )
                                 _conn_lock.commit()
-                                print(f"[{exec_id}] UPDATE_SPOT commit dt={time.perf_counter()-t_upd:.3f}s", flush=True)
+                                print(
+                                    f"[{exec_id}] UPDATE_SPOT commit dt={time.perf_counter()-t_upd:.3f}s",
+                                    flush=True,
+                                )
                     finally:
                         liberar_lock_ticker(_conn_lock, ticker)
                         print(f"[{exec_id}] UNLOCK", flush=True)
@@ -170,14 +233,16 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
                     _conn_lock.close()
                 except Exception:
                     pass
-    # === FIM TTL + LOCK ===
 
     # Screener (leitura do DB)
     t_sc1 = time.perf_counter()
     print(f"[{exec_id}] BEFORE_SCREENER_DB_READ", flush=True)
     res = screener_atm_dois_vencimentos(ticker, hoje)
-    print(f"[{exec_id}] AFTER_SCREENER_DB_READ dt={time.perf_counter()-t_sc1:.3f}s "
-          f"atm_len={len((res or {}).get('atm', []))}", flush=True)
+    print(
+        f"[{exec_id}] AFTER_SCREENER_DB_READ dt={time.perf_counter()-t_sc1:.3f}s "
+        f"atm_len={len((res or {}).get('atm', []))}",
+        flush=True,
+    )
 
     # Fallback (caso venha vazio): 1 atualização global + spot preferencial BS
     if not (res or {}).get("atm"):
@@ -194,12 +259,18 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
                     try:
                         t_u_all = time.perf_counter()
                         inserir_opcoes_do_ativo(ticker)  # atualização global
-                        print(f"[{exec_id}] UPDATE_ALL done dt={time.perf_counter()-t_u_all:.3f}s", flush=True)
+                        print(
+                            f"[{exec_id}] UPDATE_ALL done dt={time.perf_counter()-t_u_all:.3f}s",
+                            flush=True,
+                        )
 
                         t_payload2 = time.perf_counter()
                         payload = buscar_opcoes_ativo(ticker.upper().strip())
                         spot_new = _spot_preferir_bs(ticker.upper().strip(), payload)
-                        print(f"[{exec_id}] PAYLOAD2+SPOT spot_new={spot_new} dt={time.perf_counter()-t_payload2:.3f}s", flush=True)
+                        print(
+                            f"[{exec_id}] PAYLOAD2+SPOT spot_new={spot_new} dt={time.perf_counter()-t_payload2:.3f}s",
+                            flush=True,
+                        )
 
                         if spot_new is not None:
                             t_upd2 = time.perf_counter()
@@ -214,7 +285,10 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
                                     (spot_new, ticker),
                                 )
                             _conn_lock.commit()
-                            print(f"[{exec_id}] UPDATE_SPOT2 commit dt={time.perf_counter()-t_upd2:.3f}s", flush=True)
+                            print(
+                                f"[{exec_id}] UPDATE_SPOT2 commit dt={time.perf_counter()-t_upd2:.3f}s",
+                                flush=True,
+                            )
                     finally:
                         liberar_lock_ticker(_conn_lock, ticker)
                         print(f"[{exec_id}] UNLOCK2", flush=True)
@@ -227,11 +301,22 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
         t_sc2 = time.perf_counter()
         print(f"[{exec_id}] BEFORE_SCREENER_DB_READ_AGAIN", flush=True)
         res = screener_atm_dois_vencimentos(ticker, hoje)
-        print(f"[{exec_id}] AFTER_SCREENER_DB_READ_AGAIN dt={time.perf_counter()-t_sc2:.3f}s "
-              f"atm_len={len((res or {}).get('atm', []))}", flush=True)
+        print(
+            f"[{exec_id}] AFTER_SCREENER_DB_READ_AGAIN dt={time.perf_counter()-t_sc2:.3f}s "
+            f"atm_len={len((res or {}).get('atm', []))}",
+            flush=True,
+        )
+
+    # Armazena no cache de resultado, se houver dados
+    if res and (res.get("atm")) and result_ttl_min > 0:
+        _screener_cache[cache_key] = {"ts": now_ts, "data": res}
+        print(f"[{exec_id}] CACHE_STORE_SCREENER key={cache_key}", flush=True)
 
     # --- DEBUG: fim da função ---
-    print(f"[{exec_id}] END atualizar_e_screener_atm_2venc total={time.perf_counter()-t0:.3f}s", flush=True)
+    print(
+        f"[{exec_id}] END atualizar_e_screener_atm_2venc total={time.perf_counter()-t0:.3f}s",
+        flush=True,
+    )
     # --- DEBUG ---
 
     return res
