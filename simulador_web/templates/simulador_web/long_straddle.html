@@ -1,94 +1,158 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
-    <meta charset="utf-8">
-    <title>Long Straddle</title>
+    <meta charset="UTF-8">
+    <title>Long Straddle – Screener</title>
     <style>
-        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 16px;
+            background: #f5f5f5;
+        }
+        h1 {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .form-row label {
+            font-size: 13px;
+            display: block;
+            margin-bottom: 2px;
+        }
+        .form-row input,
+        .form-row select {
+            padding: 4px 6px;
+            font-size: 13px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            min-width: 90px;
+        }
+        .btn {
+            padding: 6px 14px;
+            font-size: 13px;
+            border-radius: 6px;
+            border: none;
+            background: #2563eb;
+            color: #fff;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background: #1d4ed8;
+        }
         table {
-            border-collapse: collapse;
             width: 100%;
-            margin-top: 10px;
-            font-size: 14px;
+            border-collapse: collapse;
+            font-size: 12px;
         }
         th, td {
             padding: 4px 6px;
-            text-align: right;
-            border-bottom: 1px solid #dddddd; /* só linha horizontal, sem verticais */
+            border-bottom: 1px solid #e5e7eb;
+            white-space: nowrap;
         }
-        th:first-child, td:first-child,
-        th:nth-child(2), td:nth-child(2),
-        th:nth-child(3), td:nth-child(3) {
+        th {
+            background: #f3f4f6;
+            text-align: right;
+        }
+        th:first-child, td:first-child {
             text-align: left;
         }
-        tr:nth-child(even) { background-color: #fafafa; } /* linhas alternadas suaves */
-        h1 { font-size: 22px; }
-        form label { margin-left: 8px; }
+        .text-right {
+            text-align: right;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 999px;
+            font-size: 11px;
+            background: #e5e7eb;
+        }
+        .erro {
+            color: #b91c1c;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        .aviso {
+            color: #92400e;
+            font-size: 12px;
+            margin-top: 6px;
+        }
     </style>
-    <script>
-        function toggleCrush() {
-            var sel = document.getElementById('horizonte');
-            var crush = document.getElementById('crush_iv');
-            if (sel.value === 'D+1') {
-                crush.disabled = false;
-            } else {
-                crush.disabled = true;
-            }
-        }
-        window.addEventListener('load', toggleCrush);
-
-        function showLoading() {
-            var div = document.getElementById('loading');
-            if (div) div.style.display = 'block';
-        }
-    </script>
 </head>
 <body>
-<h1>Long Straddle</h1>
 
-<form method="GET" onsubmit="showLoading()">
-    <label>Ativo:</label>
-    <input type="text" name="ativo" placeholder="ex: PETR4" value="{{ ativo }}" required>
+<div class="card">
+    <h1>Long Straddle – Screener ATM</h1>
 
-    <label>Lote total:</label>
-    <input type="number" name="lote_total" value="{{ lote_total }}" step="100" min="100">
-
-    <label>Horizonte:</label>
-    <select name="horizonte" id="horizonte" onchange="toggleCrush()">
-        <option value="Vencimento" {% if horizonte == "Vencimento" %}selected{% endif %}>Vencimento</option>
-        <option value="D+1" {% if horizonte == "D+1" %}selected{% endif %}>D+1</option>
-    </select>
-
-    <label>Crush IV (%):</label>
-    <input type="number" name="crush_iv" id="crush_iv" value="{{ crush_iv }}" step="1">
-
-    <button type="submit">Buscar opções</button>
-</form>
-
-<div id="loading" style="display:none; margin-top:10px;">
-    <b>Carregando simulação...</b>
-</div>
-
-<hr>
-
-{% if erro %}
-    <p style="color: red;"><b>Erro:</b> {{ erro }}</p>
-{% endif %}
-
-{% if aviso_horizonte %}
-    <p style="color: orange;"><i>{{ aviso_horizonte }}</i></p>
-{% endif %}
-
-{% if resultado and linhas_screener %}
-    {% if spot_oficial %}
-        <p><b>Spot oficial:</b> {{ spot_oficial }}</p>
+    {% if erro %}
+        <div class="erro">{{ erro }}</div>
     {% endif %}
 
+    <form method="get">
+        <div class="form-row">
+            <div>
+                <label for="id_ativo">Ativo</label>
+                <input type="text" id="id_ativo" name="ativo" value="{{ ativo }}" placeholder="PETR4">
+            </div>
+            <div>
+                <label for="id_lote_total">Lote Total</label>
+                <input type="number" id="id_lote_total" name="lote_total" value="{{ lote_total }}">
+            </div>
+            <div>
+                <label for="id_horizonte">Horizonte</label>
+                <select id="id_horizonte" name="horizonte">
+                    <option value="Vencimento" {% if horizonte == "Vencimento" %}selected{% endif %}>Vencimento</option>
+                    <option value="D+1" {% if horizonte == "D+1" %}selected{% endif %}>D+1</option>
+                </select>
+            </div>
+            <div>
+                <label for="id_crush_iv">Crush IV (%)</label>
+                <input
+                    type="number"
+                    step="0.1"
+                    id="id_crush_iv"
+                    name="crush_iv"
+                    value="{{ crush_iv }}"
+                >
+            </div>
+            <div style="align-self:flex-end;">
+                <button class="btn" type="submit" id="btn_rodar">Rodar screener</button>
+            </div>
+        </div>
+
+        {% if spot_oficial %}
+            <div style="font-size: 12px; margin-top: 4px;">
+                Spot oficial: <strong>{{ spot_oficial|floatformat:2 }}</strong>
+            </div>
+        {% endif %}
+
+        {% if aviso_horizonte %}
+            <div class="aviso">{{ aviso_horizonte }}</div>
+        {% endif %}
+
+        <!-- status de processamento (preenchido via JS ao enviar o form) -->
+        <div id="status_msg" class="aviso"></div>
+    </form>
+</div>
+
+{% if linhas_screener %}
+<div class="card" id="resultado_card">
     <table>
+        <thead>
         <tr>
-            <th>Moneyness</th>
-            <th>CALL</th>
-            <th>PUT</th>
+            <th style="text-align:center;">CALL</th>
+            <th style="text-align:center;">PUT</th>
             <th>Strike</th>
             <th>%BE↓</th>
             <th>BE↓</th>
@@ -105,42 +169,123 @@
             <th>Lote PUT</th>
             <th>Custo Operação</th>
         </tr>
-        {% for linha in linhas_screener %}
+        </thead>
+        <tbody>
+        {% for r in linhas_screener %}
             <tr>
-                <td>ATM</td>
-                <td>{{ linha.call }}</td>
-                <td>{{ linha.put }}</td>
-                <td>{{ linha.strike }}</td>
-                <td>
-                    {% if linha.be_pct_down is not None %}
-                        {{ linha.be_pct_down|floatformat:2 }}%
+                <td>{{ r.call }}</td>
+                <td>{{ r.put }}</td>
+                <td class="text-right">
+                    {{ r.strike|floatformat:2 }}
+                </td>
+
+                {# %BE↓ e %BE↑ – 2 casas + símbolo % #}
+                <td class="text-right">
+                    {% if r.be_pct_down is not None %}
+                        {{ r.be_pct_down|floatformat:2 }}%
                     {% endif %}
                 </td>
-                <td>{{ linha.be_down }}</td>
-                <td>
-                    {% if linha.be_pct_up is not None %}
-                        {{ linha.be_pct_up|floatformat:2 }}%
+                <td class="text-right">
+                    {{ r.be_down|floatformat:2 }}
+                </td>
+                <td class="text-right">
+                    {% if r.be_pct_up is not None %}
+                        {{ r.be_pct_up|floatformat:2 }}%
                     {% endif %}
                 </td>
-                <td>{{ linha.be_up }}</td>
-                <td>{{ linha.spot }}</td>
-                <td>{{ linha.premium_total }}</td>
-                <td>{{ linha.call_premio }}</td>
-                <td>{{ linha.call_delta }}</td>
-                <td>{{ linha.put_premio }}</td>
-                <td>{{ linha.put_delta }}</td>
-                <td>{{ linha.due_date }}</td>
-                <td>{{ linha.qty_call }}</td>
-                <td>{{ linha.qty_put }}</td>
-                <td>{{ linha.custo_operacao }}</td>
+                <td class="text-right">
+                    {{ r.be_up|floatformat:2 }}
+                </td>
+
+                <td class="text-right">
+                    {{ spot_oficial|default_if_none:r.spot|floatformat:2 }}
+                </td>
+
+                <td class="text-right">
+                    R$ {{ r.premium_total|floatformat:4 }}
+                </td>
+                <td class="text-right">
+                    R$ {{ r.call_premio|floatformat:4 }}
+                </td>
+                <td class="text-right">
+                    {% if r.call_delta is not None %}
+                        {{ r.call_delta|floatformat:4 }}
+                    {% endif %}
+                </td>
+                <td class="text-right">
+                    R$ {{ r.put_premio|floatformat:4 }}
+                </td>
+                <td class="text-right">
+                    {% if r.put_delta is not None %}
+                        {{ r.put_delta|floatformat:4 }}
+                    {% endif %}
+                </td>
+                <td>{{ r.due_date }}</td>
+                <td class="text-right">
+                    {{ r.qty_call }}
+                </td>
+                <td class="text-right">
+                    {{ r.qty_put }}
+                </td>
+                <td class="text-right">
+                    R$ {{ r.custo_operacao|floatformat:2 }}
+                </td>
             </tr>
         {% endfor %}
+        </tbody>
     </table>
-
-{% else %}
-    {% if not erro %}
-        <p>Informe os parâmetros acima e clique em "Buscar opções" para listar os pares ATM.</p>
-    {% endif %}
+</div>
 {% endif %}
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const form = document.querySelector("form");
+        const btn = document.getElementById("btn_rodar");
+        const horiz = document.getElementById("id_horizonte");
+        const crush = document.getElementById("id_crush_iv");
+        const status = document.getElementById("status_msg");
+
+        function syncCrushField() {
+            if (!horiz || !crush) return;
+            if (horiz.value === "D+1") {
+                // habilita e garante default 10 se estiver vazio
+                crush.disabled = false;
+                if (!crush.value) {
+                    crush.value = "10";
+                }
+            } else {
+                // desabilita, mas NÃO apaga o valor (fica cinza, igual Flet)
+                crush.disabled = true;
+            }
+        }
+
+        // estado inicial ao carregar a página
+        syncCrushField();
+
+        if (horiz) {
+            horiz.addEventListener("change", function () {
+                syncCrushField();
+            });
+        }
+
+        if (form && btn) {
+            form.addEventListener("submit", function () {
+                // mensagem visual de processamento
+                if (status) {
+                    status.textContent = "Processando screener...";
+                }
+                btn.disabled = true;
+                btn.textContent = "Processando...";
+
+                // limpa resultado anterior enquanto processa (efeito parecido com Flet)
+                const card = document.getElementById("resultado_card");
+                if (card) {
+                    card.style.opacity = "0.3";
+                }
+            });
+        }
+    });
+</script>
+
 </body>
 </html>

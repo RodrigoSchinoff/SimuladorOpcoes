@@ -9,8 +9,6 @@ from services.api import buscar_detalhes_opcao, get_spot_ativo_oficial
 import os
 
 
-
-
 LOT_MIN = 100
 DEFAULT_TOTAL_LOT = 10000
 
@@ -66,22 +64,22 @@ def long_straddle(request):
     lote_total = _parse_total_lot(lote_total_raw, DEFAULT_TOTAL_LOT)
     crush_iv = _to_float(crush_iv_raw, 10.0)
 
+    # Se não informou ativo:
+    # - primeira carga (sem GET): só mostra formulário
+    # - se veio GET com ativo vazio: mostra erro
     if not ativo:
-        return render(
-            request,
-            "simulador_web/long_straddle.html",
-            {
-                "resultado": None,
-                "erro": None,
-                "ativo": "",
-                "spot_oficial": None,
-                "linhas_screener": None,
-                "lote_total": lote_total,
-                "horizonte": horizonte,
-                "crush_iv": crush_iv,
-                "aviso_horizonte": None,
-            },
-        )
+        contexto = {
+            "resultado": None,
+            "erro": "Informe o ativo (ex.: PETR4, VALE3)." if request.GET else None,
+            "ativo": ativo,
+            "spot_oficial": None,
+            "linhas_screener": None,
+            "lote_total": lote_total,
+            "horizonte": horizonte,
+            "crush_iv": crush_iv,
+            "aviso_horizonte": None,
+        }
+        return render(request, "simulador_web/long_straddle.html", contexto)
 
     try:
         # ---------- 1) Screener ATM (mesmo core do Flet) ----------
@@ -97,7 +95,7 @@ def long_straddle(request):
             spot_uni = _to_float(linhas_atm[0].get("spot"))
         spot_uni = _to_float(spot_uni) if spot_uni is not None else 0.0
 
-        # ---------- 3) D+1 + Crush IV (cópia do Flet, sem UI) ----------
+        # ---------- 3) D+1 + Crush IV (cópia da lógica do Flet) ----------
         if horizonte == "D+1" and linhas_atm:
             def _mid(d: dict) -> float:
                 b = _to_float(d.get("bid"))
@@ -137,10 +135,11 @@ def long_straddle(request):
                     cd = buscar_detalhes_opcao(call_sym)
                     pd = buscar_detalhes_opcao(put_sym)
 
-                    # sempre o mesmo SPOT único, como no Flet
-                    S = spot_uni if spot_uni else _to_float(
-                        cd.get("spot_price") or pd.get("spot_price")
-                    )
+                    # sempre o mesmo SPOT único (igual Flet)
+                    if spot_uni and spot_uni > 0:
+                        S = spot_uni
+                    else:
+                        S = _to_float(cd.get("spot_price") or pd.get("spot_price"))
 
                     Kc = _to_float(cd.get("strike"))
                     Kp = _to_float(pd.get("strike"))
@@ -174,14 +173,13 @@ def long_straddle(request):
         else:
             aviso_horizonte = None
 
-        # ---------- 4) Lotes e custo (mesma lógica do Flet) ----------
+        # ---------- 4) Lotes, custo e %BE (mesma lógica do Flet) ----------
         linhas_enriquecidas = []
         for r in linhas_atm:
-            call_sym = r.get("call")
-            put_sym = r.get("put")
             delta_c = r.get("call_delta")
             delta_p = r.get("put_delta")
 
+            # pesos pelos deltas
             w_call = abs(_to_float(delta_p)) if delta_p is not None else None
             w_put = abs(_to_float(delta_c)) if delta_c is not None else None
 
@@ -206,11 +204,34 @@ def long_straddle(request):
             put_premio = _to_float(r.get("put_premio"))
             custo_oper = qty_call * call_premio + qty_put * put_premio
 
-            linha = dict(r)
-            linha["qty_call"] = qty_call
-            linha["qty_put"] = qty_put
-            linha["custo_operacao"] = custo_oper
-            linhas_enriquecidas.append(linha)
+            r = dict(r)  # cópia para não mexer no original
+            r["qty_call"] = qty_call
+            r["qty_put"] = qty_put
+            r["custo_operacao"] = custo_oper
+
+            # ---- %BE↓ e %BE↑ (compatível com a grade do Flet) ----
+            be_down_val = r.get("be_down")
+            be_up_val = r.get("be_up")
+
+            # usa sempre o spot único oficial quando existir
+            if spot_uni and spot_uni > 0:
+                spot_ref = spot_uni
+            else:
+                spot_ref = _to_float(r.get("spot"))
+
+            if spot_ref and spot_ref > 0:
+                r["be_pct_down"] = (
+                    ((be_down_val / spot_ref) - 1.0) * 100.0 if be_down_val is not None else None
+                )
+                r["be_pct_up"] = (
+                    ((be_up_val / spot_ref) - 1.0) * 100.0 if be_up_val is not None else None
+                )
+            else:
+                r["be_pct_down"] = None
+                r["be_pct_up"] = None
+            # ---- fim %BE ----
+
+            linhas_enriquecidas.append(r)
 
         # ---------- 5) Simulador (usa o primeiro par da lista) ----------
         primeira = linhas_atm[0]
