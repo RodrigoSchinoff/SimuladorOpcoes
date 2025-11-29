@@ -24,7 +24,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 
     # App do simulador web
-    "simulador_web",
+    "ls-v5oh.onrender.com",
 ]
 
 MIDDLEWARE = [
