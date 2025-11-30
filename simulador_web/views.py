@@ -1,3 +1,4 @@
+# simulador_web/views.py
 from django.shortcuts import render
 
 from simulacoes.long_straddle import simular_long_straddle
@@ -11,6 +12,12 @@ import os
 
 LOT_MIN = 100
 DEFAULT_TOTAL_LOT = 10000
+
+# Lista padrão de ativos quando o usuário NÃO informa nada
+LISTA_ATIVOS_PADRAO = [
+    "PETR4", "VALE3", "ITUB4", "BBDC4", "ABEV3",
+    "BBAS3", "WEGE3", "B3SA3", "RENT3", "ITSA4",
+]
 
 
 def _to_float(v, default=0.0):
@@ -29,7 +36,6 @@ def _parse_total_lot(v, default=DEFAULT_TOTAL_LOT):
             x = LOT_MIN
     except Exception:
         x = default
-    # normaliza para múltiplo de 100 (mais próximo)
     m = (x + LOT_MIN // 2) // LOT_MIN * LOT_MIN
     return int(m)
 
@@ -49,13 +55,18 @@ def _round_lots(call_raw, put_raw, total):
     return c, p
 
 
-# Página inicial simples
 def home(request):
     return render(request, "simulador_web/home.html")
 
 
-# Long Straddle – usando o core real + screener/market_data
-def long_straddle(request):
+# =========================================================
+# LONG STRADDLE – VIEW PRINCIPAL
+# =========================================================
+async def long_straddle(request):
+
+    # -----------------------------
+    # PARÂMETROS DO FORM
+    # -----------------------------
     ativo = (request.GET.get("ativo") or "").upper().strip()
     lote_total_raw = request.GET.get("lote_total") or str(DEFAULT_TOTAL_LOT)
     horizonte = request.GET.get("horizonte") or "Vencimento"
@@ -64,39 +75,68 @@ def long_straddle(request):
     lote_total = _parse_total_lot(lote_total_raw, DEFAULT_TOTAL_LOT)
     crush_iv = _to_float(crush_iv_raw, 10.0)
 
-    # Se não informou ativo:
-    # - primeira carga (sem GET): só mostra formulário
-    # - se veio GET com ativo vazio: mostra erro
-    if not ativo:
-        contexto = {
-            "resultado": None,
-            "erro": "Informe o ativo (ex.: PETR4, VALE3)." if request.GET else None,
-            "ativo": ativo,
-            "spot_oficial": None,
-            "linhas_screener": None,
-            "lote_total": lote_total,
-            "horizonte": horizonte,
-            "crush_iv": crush_iv,
-            "aviso_horizonte": None,
-        }
-        return render(request, "simulador_web/long_straddle.html", contexto)
+    # Novos parâmetros
+    num_vencimentos = request.GET.get("num_vencimentos", "1")
+    be_max_pct_raw = request.GET.get("be_max_pct")
+    be_max_pct = float(be_max_pct_raw) if be_max_pct_raw else None
 
     try:
-        # ---------- 1) Screener ATM (mesmo core do Flet) ----------
-        res = atualizar_e_screener_atm_2venc(ativo, refresh=False)
-        linhas_atm = (res or {}).get("atm", []) or []
+        # ------------------------------------------------------
+        # 1) DEFINIR QUAIS ATIVOS VÃO SER PROCESSADOS
+        # ------------------------------------------------------
+        if ativo:
+            tickers = [ativo]
+        else:
+            tickers = LISTA_ATIVOS_PADRAO[:]  # cópia simples
+
+        # ------------------------------------------------------
+        # 2) RODAR SCREENER PARA CADA TICKER E JUNTAR RESULTADOS
+        # ------------------------------------------------------
+        import asyncio
+
+        linhas_atm = []
+
+        async def run_screener(tkr):
+            # importante: rodar sincrono em thread pool para não travar o event loop
+            return await asyncio.to_thread(atualizar_e_screener_atm_2venc, tkr, False)
+
+        # dispara todos os tickers em paralelo
+        resultados = await asyncio.gather(*[run_screener(t) for t in tickers], return_exceptions=True)
+
+        for tkr, res in zip(tickers, resultados):
+            if isinstance(res, Exception):
+                continue
+            atm_tkr = (res or {}).get("atm", []) or []
+            for row in atm_tkr:
+                r = dict(row)
+                r["ticker"] = tkr
+                linhas_atm.append(r)
 
         if not linhas_atm:
             raise ValueError("Nenhuma linha ATM retornada pelo screener.")
 
-        # ---------- 2) Spot único oficial (igual Flet) ----------
-        spot_uni = get_spot_ativo_oficial(ativo)
-        if spot_uni is None and linhas_atm:
-            spot_uni = _to_float(linhas_atm[0].get("spot"))
-        spot_uni = _to_float(spot_uni) if spot_uni is not None else 0.0
+        # ------------------------------------------------------
+        # ORDENAR APENAS POR TICKER (ordem alfabética)
+        # ------------------------------------------------------
+        linhas_atm.sort(key=lambda r: r.get("ticker", ""))
 
-        # ---------- 3) D+1 + Crush IV (cópia da lógica do Flet) ----------
+        # ------------------------------------------------------
+        # 3) SPOT OFICIAL (APENAS SE TIVER 1 ATIVO)
+        # ------------------------------------------------------
+        if len(tickers) == 1:
+            spot_uni = get_spot_ativo_oficial(tickers[0])
+            if spot_uni is None and linhas_atm:
+                spot_uni = _to_float(linhas_atm[0].get("spot"))
+            spot_uni = _to_float(spot_uni) if spot_uni is not None else 0.0
+        else:
+            # multi-ativos: não faz sentido um único spot oficial global
+            spot_uni = None
+
+        # ------------------------------------------------------
+        # 4) D+1 + CRUSH IV (SE APLICÁVEL)
+        # ------------------------------------------------------
         if horizonte == "D+1" and linhas_atm:
+
             def _mid(d: dict) -> float:
                 b = _to_float(d.get("bid"))
                 a = _to_float(d.get("ask"))
@@ -135,7 +175,7 @@ def long_straddle(request):
                     cd = buscar_detalhes_opcao(call_sym)
                     pd = buscar_detalhes_opcao(put_sym)
 
-                    # sempre o mesmo SPOT único (igual Flet)
+                    # Se houver spot global (um ativo só), usa ele, senão spot da própria opção
                     if spot_uni and spot_uni > 0:
                         S = spot_uni
                     else:
@@ -143,7 +183,6 @@ def long_straddle(request):
 
                     Kc = _to_float(cd.get("strike"))
                     Kp = _to_float(pd.get("strike"))
-
                     Tc = _T_years(cd.get("days_to_maturity"))
                     Tp = _T_years(pd.get("days_to_maturity"))
                     Tc1 = max(Tc - 1 / 252.0, 1e-6)
@@ -173,13 +212,14 @@ def long_straddle(request):
         else:
             aviso_horizonte = None
 
-        # ---------- 4) Lotes, custo e %BE (mesma lógica do Flet) ----------
+        # ------------------------------------------------------
+        # 5) ENRIQUECER LINHAS (LOTE, CUSTO, %BE)
+        # ------------------------------------------------------
         linhas_enriquecidas = []
         for r in linhas_atm:
             delta_c = r.get("call_delta")
             delta_p = r.get("put_delta")
 
-            # pesos pelos deltas
             w_call = abs(_to_float(delta_p)) if delta_p is not None else None
             w_put = abs(_to_float(delta_c)) if delta_c is not None else None
 
@@ -204,37 +244,60 @@ def long_straddle(request):
             put_premio = _to_float(r.get("put_premio"))
             custo_oper = qty_call * call_premio + qty_put * put_premio
 
-            r = dict(r)  # cópia para não mexer no original
+            r = dict(r)
             r["qty_call"] = qty_call
             r["qty_put"] = qty_put
             r["custo_operacao"] = custo_oper
 
-            # ---- %BE↓ e %BE↑ (compatível com a grade do Flet) ----
+            # Spot de referência: único se tiver, senão o spot da própria linha
+            spot_ref = spot_uni if (spot_uni and spot_uni > 0) else _to_float(r.get("spot"))
+
             be_down_val = r.get("be_down")
             be_up_val = r.get("be_up")
 
-            # usa sempre o spot único oficial quando existir
-            if spot_uni and spot_uni > 0:
-                spot_ref = spot_uni
-            else:
-                spot_ref = _to_float(r.get("spot"))
-
             if spot_ref and spot_ref > 0:
-                r["be_pct_down"] = (
-                    ((be_down_val / spot_ref) - 1.0) * 100.0 if be_down_val is not None else None
-                )
-                r["be_pct_up"] = (
-                    ((be_up_val / spot_ref) - 1.0) * 100.0 if be_up_val is not None else None
-                )
+                r["be_pct_down"] = ((be_down_val / spot_ref) - 1.0) * 100.0 if be_down_val else None
+                r["be_pct_up"] = ((be_up_val / spot_ref) - 1.0) * 100.0 if be_up_val else None
             else:
                 r["be_pct_down"] = None
                 r["be_pct_up"] = None
-            # ---- fim %BE ----
 
             linhas_enriquecidas.append(r)
 
-        # ---------- 5) Simulador (usa o primeiro par da lista) ----------
-        primeira = linhas_atm[0]
+        # ------------------------------------------------------
+        # 6) FILTROS (%BE e Nº VENCIMENTOS)
+        # ------------------------------------------------------
+        if be_max_pct is not None:
+            linhas_enriquecidas = [
+                r for r in linhas_enriquecidas
+                if (
+                    r.get("be_pct_down") is not None and abs(r["be_pct_down"]) <= be_max_pct
+                ) or (
+                    r.get("be_pct_up") is not None and abs(r["be_pct_up"]) <= be_max_pct
+                )
+            ]
+
+        # Cortar por vencimentos **por ativo**
+        if num_vencimentos in ("1", "2"):
+            max_rows = 2 if num_vencimentos == "1" else 4
+            agrupado = {}
+            for r in linhas_enriquecidas:
+                tkr = r.get("ticker", "??")
+                agrupado.setdefault(tkr, []).append(r)
+
+            linhas_filtradas = []
+            for tkr, rows in agrupado.items():
+                linhas_filtradas.extend(rows[:max_rows])
+
+            linhas_enriquecidas = linhas_filtradas
+
+        if not linhas_enriquecidas:
+            raise ValueError("Nenhuma opção após filtros.")
+
+        # ------------------------------------------------------
+        # 7) SIMULAÇÃO (USA O PRIMEIRO PAR DA LISTA)
+        # ------------------------------------------------------
+        primeira = linhas_enriquecidas[0]
         call0 = buscar_detalhes_opcao(primeira["call"])
         put0 = buscar_detalhes_opcao(primeira["put"])
         resultado = simular_long_straddle(call0, put0, renderizar=False)
@@ -252,6 +315,8 @@ def long_straddle(request):
             "horizonte": horizonte,
             "crush_iv": crush_iv,
             "aviso_horizonte": aviso_horizonte,
+            "num_vencimentos": num_vencimentos,
+            "be_max_pct": be_max_pct,
         }
 
     except Exception as ex:
@@ -264,6 +329,8 @@ def long_straddle(request):
             "lote_total": lote_total,
             "horizonte": horizonte,
             "crush_iv": crush_iv,
+            "num_vencimentos": num_vencimentos,
+            "be_max_pct": be_max_pct,
             "aviso_horizonte": None,
         }
 

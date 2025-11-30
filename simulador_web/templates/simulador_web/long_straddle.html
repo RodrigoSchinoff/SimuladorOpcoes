@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Long Straddle – Screener</title>
+
     <style>
         body {
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -23,8 +24,9 @@
         .form-row {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 12px;
             margin-bottom: 8px;
+            align-items: flex-end; /* <-- CORREÇÃO DO ALINHAMENTO */
         }
         .form-row label {
             font-size: 13px;
@@ -71,13 +73,6 @@
         .text-right {
             text-align: right;
         }
-        .badge {
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 999px;
-            font-size: 11px;
-            background: #e5e7eb;
-        }
         .erro {
             color: #b91c1c;
             font-size: 13px;
@@ -89,6 +84,22 @@
             margin-top: 6px;
         }
     </style>
+
+    <!-- Confirmação multi-ativos -->
+    <script>
+    function confirmarMultiAtivos() {
+        const ativo = document.getElementById("id_ativo");
+        if (ativo && ativo.value.trim() === "") {
+            return confirm(
+                "Você selecionou vários ativos.\n" +
+                "A consulta poderá demorar alguns segundos.\n" +
+                "Deseja continuar?"
+            );
+        }
+        return true;
+    }
+    </script>
+
 </head>
 <body>
 
@@ -99,16 +110,31 @@
         <div class="erro">{{ erro }}</div>
     {% endif %}
 
-    <form method="get">
+   <form method="get">
+        <div id="status_msg" class="aviso"></div>
+
         <div class="form-row">
-            <div>
+
+            <!-- ATIVO -->
+            <div style="display:flex; flex-direction:column;">
                 <label for="id_ativo">Ativo</label>
-                <input type="text" id="id_ativo" name="ativo" value="{{ ativo }}" placeholder="PETR4">
+                <input type="text"
+                       id="id_ativo"
+                       name="ativo"
+                       value="{{ ativo }}"
+                       placeholder="Ex.: PETR4 (vazio = vários)">
+                <div style="font-size: 11px; color:#6b7280; margin-top:2px;">
+                    Deixe vazio para analisar vários ativos.
+                </div>
             </div>
+
+            <!-- LOTE TOTAL -->
             <div>
                 <label for="id_lote_total">Lote Total</label>
                 <input type="number" id="id_lote_total" name="lote_total" value="{{ lote_total }}">
             </div>
+
+            <!-- HORIZONTE -->
             <div>
                 <label for="id_horizonte">Horizonte</label>
                 <select id="id_horizonte" name="horizonte">
@@ -116,19 +142,35 @@
                     <option value="D+1" {% if horizonte == "D+1" %}selected{% endif %}>D+1</option>
                 </select>
             </div>
+
+            <!-- CRUSH IV -->
             <div>
                 <label for="id_crush_iv">Crush IV (%)</label>
-                <input
-                    type="number"
-                    step="0.1"
-                    id="id_crush_iv"
-                    name="crush_iv"
-                    value="{{ crush_iv }}"
-                >
+                <input type="number" step="0.1" id="id_crush_iv" name="crush_iv" value="{{ crush_iv }}">
             </div>
-            <div style="align-self:flex-end;">
-                <button class="btn" type="submit" id="btn_rodar">Rodar screener</button>
+
+            <!-- Nº VENCIMENTOS -->
+            <div>
+                <label for="id_num_venc">Nº Vencimentos</label>
+                <select id="id_num_venc" name="num_vencimentos">
+                    <option value="1" {% if num_vencimentos == "1" %}selected{% endif %}>Apenas Atual</option>
+                    <option value="2" {% if num_vencimentos == "2" %}selected{% endif %}>Atual + Próximo</option>
+                </select>
             </div>
+
+            <!-- BE MAX (%) -->
+            <div>
+                <label for="id_be_max">BE Max (%)</label>
+                <input type="number" step="0.01" id="id_be_max" name="be_max_pct"
+                       value="{% if be_max_pct is not None %}{{ be_max_pct }}{% endif %}"
+                       placeholder="Opcional (ex.: 5)">
+            </div>
+
+            <!-- BOTÃO -->
+            <div>
+                <button class="btn" type="submit" id="btn_rodar">Rodar Screener</button>
+            </div>
+
         </div>
 
         {% if spot_oficial %}
@@ -140,11 +182,9 @@
         {% if aviso_horizonte %}
             <div class="aviso">{{ aviso_horizonte }}</div>
         {% endif %}
-
-        <!-- status de processamento (preenchido via JS ao enviar o form) -->
-        <div id="status_msg" class="aviso"></div>
     </form>
 </div>
+
 
 {% if linhas_screener %}
 <div class="card" id="resultado_card">
@@ -175,61 +215,21 @@
             <tr>
                 <td>{{ r.call }}</td>
                 <td>{{ r.put }}</td>
-                <td class="text-right">
-                    {{ r.strike|floatformat:2 }}
-                </td>
-
-                {# %BE↓ e %BE↑ – 2 casas + símbolo % #}
-                <td class="text-right">
-                    {% if r.be_pct_down is not None %}
-                        {{ r.be_pct_down|floatformat:2 }}%
-                    {% endif %}
-                </td>
-                <td class="text-right">
-                    {{ r.be_down|floatformat:2 }}
-                </td>
-                <td class="text-right">
-                    {% if r.be_pct_up is not None %}
-                        {{ r.be_pct_up|floatformat:2 }}%
-                    {% endif %}
-                </td>
-                <td class="text-right">
-                    {{ r.be_up|floatformat:2 }}
-                </td>
-
-                <td class="text-right">
-                    {{ spot_oficial|default_if_none:r.spot|floatformat:2 }}
-                </td>
-
-                <td class="text-right">
-                    R$ {{ r.premium_total|floatformat:4 }}
-                </td>
-                <td class="text-right">
-                    R$ {{ r.call_premio|floatformat:4 }}
-                </td>
-                <td class="text-right">
-                    {% if r.call_delta is not None %}
-                        {{ r.call_delta|floatformat:4 }}
-                    {% endif %}
-                </td>
-                <td class="text-right">
-                    R$ {{ r.put_premio|floatformat:4 }}
-                </td>
-                <td class="text-right">
-                    {% if r.put_delta is not None %}
-                        {{ r.put_delta|floatformat:4 }}
-                    {% endif %}
-                </td>
+                <td class="text-right">{{ r.strike|floatformat:2 }}</td>
+                <td class="text-right">{% if r.be_pct_down is not None %}{{ r.be_pct_down|floatformat:2 }}%{% endif %}</td>
+                <td class="text-right">{{ r.be_down|floatformat:2 }}</td>
+                <td class="text-right">{% if r.be_pct_up is not None %}{{ r.be_pct_up|floatformat:2 }}%{% endif %}</td>
+                <td class="text-right">{{ r.be_up|floatformat:2 }}</td>
+                <td class="text-right">{{ spot_oficial|default_if_none:r.spot|floatformat:2 }}</td>
+                <td class="text-right">R$ {{ r.premium_total|floatformat:4 }}</td>
+                <td class="text-right">R$ {{ r.call_premio|floatformat:4 }}</td>
+                <td class="text-right">{% if r.call_delta is not None %}{{ r.call_delta|floatformat:4 }}{% endif %}</td>
+                <td class="text-right">R$ {{ r.put_premio|floatformat:4 }}</td>
+                <td class="text-right">{% if r.put_delta is not None %}{{ r.put_delta|floatformat:4 }}{% endif %}</td>
                 <td>{{ r.due_date }}</td>
-                <td class="text-right">
-                    {{ r.qty_call }}
-                </td>
-                <td class="text-right">
-                    {{ r.qty_put }}
-                </td>
-                <td class="text-right">
-                    R$ {{ r.custo_operacao|floatformat:2 }}
-                </td>
+                <td class="text-right">{{ r.qty_call }}</td>
+                <td class="text-right">{{ r.qty_put }}</td>
+                <td class="text-right">R$ {{ r.custo_operacao|floatformat:2 }}</td>
             </tr>
         {% endfor %}
         </tbody>
@@ -237,54 +237,49 @@
 </div>
 {% endif %}
 
+
+<!-- SCRIPT FINAL CORRIGIDO -->
 <script>
-    document.addEventListener("DOMContentLoaded", function () {
-        const form = document.querySelector("form");
-        const btn = document.getElementById("btn_rodar");
-        const horiz = document.getElementById("id_horizonte");
-        const crush = document.getElementById("id_crush_iv");
-        const status = document.getElementById("status_msg");
+document.addEventListener("DOMContentLoaded", function () {
 
-        function syncCrushField() {
-            if (!horiz || !crush) return;
-            if (horiz.value === "D+1") {
-                // habilita e garante default 10 se estiver vazio
-                crush.disabled = false;
-                if (!crush.value) {
-                    crush.value = "10";
-                }
-            } else {
-                // desabilita, mas NÃO apaga o valor (fica cinza, igual Flet)
-                crush.disabled = true;
-            }
+    const form = document.querySelector("form");
+    const btn = document.getElementById("btn_rodar");
+    const status = document.getElementById("status_msg");
+    const horiz = document.getElementById("id_horizonte");
+    const crush = document.getElementById("id_crush_iv");
+
+    // Ativar/desativar campo Crush IV
+    function syncCrushField() {
+        if (horiz.value === "D+1") {
+            crush.disabled = false;
+            if (!crush.value) crush.value = "10";
+        } else {
+            crush.disabled = true;
+        }
+    }
+
+    syncCrushField();
+    horiz.addEventListener("change", syncCrushField);
+
+    // SUBMIT CORRIGIDO
+    form.addEventListener("submit", function (ev) {
+
+        // Se cancelar → nada acontece
+        if (!confirmarMultiAtivos()) {
+            ev.preventDefault();
+            return false;
         }
 
-        // estado inicial ao carregar a página
-        syncCrushField();
+        // Se confirmar → exibir processando
+        if (status) status.textContent = "Processando screener...";
+        btn.disabled = true;
+        btn.textContent = "Processando...";
 
-        if (horiz) {
-            horiz.addEventListener("change", function () {
-                syncCrushField();
-            });
-        }
-
-        if (form && btn) {
-            form.addEventListener("submit", function () {
-                // mensagem visual de processamento
-                if (status) {
-                    status.textContent = "Processando screener...";
-                }
-                btn.disabled = true;
-                btn.textContent = "Processando...";
-
-                // limpa resultado anterior enquanto processa (efeito parecido com Flet)
-                const card = document.getElementById("resultado_card");
-                if (card) {
-                    card.style.opacity = "0.3";
-                }
-            });
-        }
+        const card = document.getElementById("resultado_card");
+        if (card) card.style.opacity = "0.3";
     });
+
+});
 </script>
 
 </body>
