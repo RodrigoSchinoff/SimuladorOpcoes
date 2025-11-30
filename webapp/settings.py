@@ -25,7 +25,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 
     # App do simulador web
-    "simulador_web",
+    "simuladorls.onrender.com",
 ]
 
 
