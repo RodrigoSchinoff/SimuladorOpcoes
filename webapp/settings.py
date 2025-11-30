@@ -15,7 +15,6 @@ ALLOWED_HOSTS = [
 ]
 
 
-
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -24,8 +23,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # App do simulador web
-    "simuladorls.onrender.com",
+    # App do simulador web (nome do app Django, NÃO a URL)
+    "simulador_web",
 ]
 
 
