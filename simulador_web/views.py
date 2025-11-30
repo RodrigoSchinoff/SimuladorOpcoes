@@ -64,6 +64,24 @@ def home(request):
 # =========================================================
 async def long_straddle(request):
 
+    # ---------------------------------------------------------------------
+    # NOVO (CORREÇÃO): se não há parâmetros, retorna tela vazia sem rodar
+    # ---------------------------------------------------------------------
+    if not request.GET:
+        return render(request, "simulador_web/long_straddle.html", {
+            "resultado": None,
+            "erro": None,
+            "ativo": "",
+            "spot_oficial": None,
+            "linhas_screener": None,
+            "lote_total": DEFAULT_TOTAL_LOT,
+            "horizonte": "Vencimento",
+            "crush_iv": 10,
+            "num_vencimentos": "1",
+            "be_max_pct": None,
+            "aviso_horizonte": None,
+        })
+
     # -----------------------------
     # PARÂMETROS DO FORM
     # -----------------------------
@@ -87,20 +105,18 @@ async def long_straddle(request):
         if ativo:
             tickers = [ativo]
         else:
-            tickers = LISTA_ATIVOS_PADRAO[:]  # cópia simples
+            tickers = LISTA_ATIVOS_PADRAO[:]
 
         # ------------------------------------------------------
-        # 2) RODAR SCREENER PARA CADA TICKER E JUNTAR RESULTADOS
+        # 2) RODAR SCREENER PARA CADA TICKER (ASSÍNCRONO)
         # ------------------------------------------------------
         import asyncio
 
         linhas_atm = []
 
         async def run_screener(tkr):
-            # importante: rodar sincrono em thread pool para não travar o event loop
             return await asyncio.to_thread(atualizar_e_screener_atm_2venc, tkr, False)
 
-        # dispara todos os tickers em paralelo
         resultados = await asyncio.gather(*[run_screener(t) for t in tickers], return_exceptions=True)
 
         for tkr, res in zip(tickers, resultados):
@@ -116,7 +132,7 @@ async def long_straddle(request):
             raise ValueError("Nenhuma linha ATM retornada pelo screener.")
 
         # ------------------------------------------------------
-        # ORDENAR APENAS POR TICKER (ordem alfabética)
+        # ORDENAR SIMPLES POR TICKER
         # ------------------------------------------------------
         linhas_atm.sort(key=lambda r: r.get("ticker", ""))
 
@@ -129,15 +145,14 @@ async def long_straddle(request):
                 spot_uni = _to_float(linhas_atm[0].get("spot"))
             spot_uni = _to_float(spot_uni) if spot_uni is not None else 0.0
         else:
-            # multi-ativos: não faz sentido um único spot oficial global
             spot_uni = None
 
         # ------------------------------------------------------
-        # 4) D+1 + CRUSH IV (SE APLICÁVEL)
+        # 4) D+1 + CRUSH IV
         # ------------------------------------------------------
         if horizonte == "D+1" and linhas_atm:
 
-            def _mid(d: dict) -> float:
+            def _mid(d):
                 b = _to_float(d.get("bid"))
                 a = _to_float(d.get("ask"))
                 if b > 0 and a > 0:
@@ -174,12 +189,7 @@ async def long_straddle(request):
                 try:
                     cd = buscar_detalhes_opcao(call_sym)
                     pd = buscar_detalhes_opcao(put_sym)
-
-                    # Se houver spot global (um ativo só), usa ele, senão spot da própria opção
-                    if spot_uni and spot_uni > 0:
-                        S = spot_uni
-                    else:
-                        S = _to_float(cd.get("spot_price") or pd.get("spot_price"))
+                    S = spot_uni if (spot_uni and spot_uni > 0) else _to_float(cd.get("spot_price") or pd.get("spot_price"))
 
                     Kc = _to_float(cd.get("strike"))
                     Kp = _to_float(pd.get("strike"))
@@ -205,15 +215,17 @@ async def long_straddle(request):
                     r["be_down"] = round(Kp - (Pc1 + Pp1), 4)
                     r["be_up"] = round(Kc + (Pc1 + Pp1), 4)
                     r["spot"] = S
+
                 except Exception:
                     continue
 
             aviso_horizonte = f"Cálculo D+1 aplicado com Crush IV de {crush_iv:.1f}%."
+
         else:
             aviso_horizonte = None
 
         # ------------------------------------------------------
-        # 5) ENRIQUECER LINHAS (LOTE, CUSTO, %BE)
+        # 5) ENRIQUECER
         # ------------------------------------------------------
         linhas_enriquecidas = []
         for r in linhas_atm:
@@ -249,7 +261,6 @@ async def long_straddle(request):
             r["qty_put"] = qty_put
             r["custo_operacao"] = custo_oper
 
-            # Spot de referência: único se tiver, senão o spot da própria linha
             spot_ref = spot_uni if (spot_uni and spot_uni > 0) else _to_float(r.get("spot"))
 
             be_down_val = r.get("be_down")
@@ -265,7 +276,7 @@ async def long_straddle(request):
             linhas_enriquecidas.append(r)
 
         # ------------------------------------------------------
-        # 6) FILTROS (%BE e Nº VENCIMENTOS)
+        # 6) FILTROS
         # ------------------------------------------------------
         if be_max_pct is not None:
             linhas_enriquecidas = [
@@ -277,7 +288,6 @@ async def long_straddle(request):
                 )
             ]
 
-        # Cortar por vencimentos **por ativo**
         if num_vencimentos in ("1", "2"):
             max_rows = 2 if num_vencimentos == "1" else 4
             agrupado = {}
@@ -295,7 +305,7 @@ async def long_straddle(request):
             raise ValueError("Nenhuma opção após filtros.")
 
         # ------------------------------------------------------
-        # 7) SIMULAÇÃO (USA O PRIMEIRO PAR DA LISTA)
+        # 7) SIMULAÇÃO
         # ------------------------------------------------------
         primeira = linhas_enriquecidas[0]
         call0 = buscar_detalhes_opcao(primeira["call"])

@@ -242,7 +242,7 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
-    const form = document.querySelector("form");
+    const form = document.getElementById("ls_form");
     const btn = document.getElementById("btn_rodar");
     const status = document.getElementById("status_msg");
     const horiz = document.getElementById("id_horizonte");
@@ -262,15 +262,12 @@ document.addEventListener("DOMContentLoaded", function () {
     horiz.addEventListener("change", syncCrushField);
 
     // SUBMIT CORRIGIDO
-    form.addEventListener("submit", function (ev) {
-
-        // Se cancelar → nada acontece
+    form.addEventListener("submit", function(ev) {
         if (!confirmarMultiAtivos()) {
             ev.preventDefault();
             return false;
         }
 
-        // Se confirmar → exibir processando
         if (status) status.textContent = "Processando screener...";
         btn.disabled = true;
         btn.textContent = "Processando...";
@@ -278,6 +275,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const card = document.getElementById("resultado_card");
         if (card) card.style.opacity = "0.3";
     });
+
 
 });
 </script>
