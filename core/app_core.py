@@ -22,7 +22,8 @@ _screener_cache = {}  # key: (ticker, v1, v2) -> {"ts": epoch_seconds, "data": d
 def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
     """
     Atualiza (se precisar) o DB de opções e roda o screener ATM para os 2 próximos vencimentos.
-    Agora com cache em memória do resultado do screener, respeitando TTL.
+    Agora com cache em memória do resultado do screener, respeitando TTL,
+    e evitando consultar o DB quando o cache ainda é válido.
     """
     from datetime import date
     import calendar, os
@@ -36,7 +37,7 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
 
     # === TTL central (evita refresh constante do DB) ===
     try:
-        ttl_min = int(os.getenv("TTL_SCREENER_MIN", "10"))  # ajuste via env se quiser
+        ttl_min = int(os.getenv("TTL_SCREENER_MIN", "10"))
     except Exception:
         ttl_min = 10
 
@@ -140,6 +141,26 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
     ds = [v1.strftime("%Y-%m-%d"), v2.strftime("%Y-%m-%d")]
     print(f"[{exec_id}] DATES_ALIGNED {ds}", flush=True)
 
+    # === CACHE DO RESULTADO DO SCREENER (ANTES de consultar DB) ===
+    global _screener_cache
+    cache_key = (ticker.upper().strip(), ds[0], ds[1])
+    now_ts = time.time()
+
+    if not refresh and result_ttl_min > 0:
+        cached = _screener_cache.get(cache_key)
+        if cached:
+            age_sec = now_ts - cached["ts"]
+            if age_sec <= result_ttl_min * 60:
+                print(
+                    f"[{exec_id}] CACHE_HIT_SCREENER key={cache_key} age={age_sec:.1f}s (no DB)",
+                    flush=True,
+                )
+                print(
+                    f"[{exec_id}] END atualizar_e_screener_atm_2venc total={time.perf_counter()-t0:.3f}s (from cache)",
+                    flush=True,
+                )
+                return cached["data"]
+
     # === TTL + LOCK por vencimento (DB) ===
     t_need = time.perf_counter()
     need_v1 = True if refresh else precisa_refresh_por_data(ticker, ds[0], max_age_minutes=ttl_min)
@@ -149,27 +170,6 @@ def atualizar_e_screener_atm_2venc(ticker: str, refresh: bool = False) -> dict:
         flush=True,
     )
 
-    # === CACHE DO RESULTADO DO SCREENER ===
-    global _screener_cache
-    cache_key = (ticker.upper().strip(), ds[0], ds[1])
-    now_ts = time.time()
-
-    if not refresh and not need_v1 and not need_v2 and result_ttl_min > 0:
-        cached = _screener_cache.get(cache_key)
-        if cached:
-            age_sec = now_ts - cached["ts"]
-            if age_sec <= result_ttl_min * 60:
-                print(
-                    f"[{exec_id}] CACHE_HIT_SCREENER key={cache_key} age={age_sec:.1f}s",
-                    flush=True,
-                )
-                print(
-                    f"[{exec_id}] END atualizar_e_screener_atm_2venc total={time.perf_counter()-t0:.3f}s (from cache)",
-                    flush=True,
-                )
-                return cached["data"]
-
-    # === SE PRECISAR, ATUALIZA DB (mantém sua lógica atual) ===
     if need_v1 or need_v2:
         t_lock = time.perf_counter()
         _conn_lock = conectar()
