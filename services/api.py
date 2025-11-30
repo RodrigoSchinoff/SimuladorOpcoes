@@ -15,29 +15,37 @@ BASE_URL = "https://api.oplab.com.br/v3/market/options"
 def buscar_opcoes_ativo(ativo_base):
     """
     Retorna uma lista de opções (CALL e PUT) do ativo informado.
+    Agora com timeout e tratamento de erro seguro.
     """
     url = f"{BASE_URL}/{ativo_base}"
-    response = requests.get(url, headers=HEADERS)
-
-    if response.status_code == 200:
-        return response.json()
-    else:
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=4.0)
+        if response.status_code == 200:
+            return response.json()
         raise Exception(f"Erro ao buscar opções de {ativo_base}: {response.status_code} - {response.text}")
+    except requests.Timeout:
+        raise Exception(f"Timeout ao buscar opções de {ativo_base}.")
+    except Exception as e:
+        raise Exception(f"Erro ao buscar opções de {ativo_base}: {e}")
 
 
 def buscar_detalhes_opcao(symbol_opcao):
     """
     Retorna os detalhes de uma opção específica pelo símbolo.
+    Agora com timeout e tratamento de erro seguro.
     """
     url = f"{BASE_URL}/details/{symbol_opcao}"
-    response = requests.get(url, headers=HEADERS)
-
-    if response.status_code == 200:
-        # dados = response.json()
-        # salvar_json_em_arquivo(dados, f"{symbol_opcao}.json")
-        return response.json()
-    else:
-        raise Exception(f"Erro ao buscar detalhes da opção {symbol_opcao}: {response.status_code} - {response.text}")
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=4.0)
+        if response.status_code == 200:
+            return response.json()
+        raise Exception(
+            f"Erro ao buscar detalhes da opção {symbol_opcao}: {response.status_code} - {response.text}"
+        )
+    except requests.Timeout:
+        raise Exception(f"Timeout ao buscar detalhes da opção {symbol_opcao}.")
+    except Exception as e:
+        raise Exception(f"Erro ao buscar detalhes da opção {symbol_opcao}: {e}")
 
 
 import json
