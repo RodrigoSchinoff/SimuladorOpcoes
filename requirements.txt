@@ -17,3 +17,6 @@ scipy
 
 # Gráficos (caso o payoff use)
 matplotlib>=3.8,<4
+
+# Variáveis de ambiente
+python-dotenv>=1.0.1
