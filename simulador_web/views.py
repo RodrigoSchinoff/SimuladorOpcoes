@@ -15,9 +15,9 @@ DEFAULT_TOTAL_LOT = 10000
 # Lista padrão de ativos (20 mais líquidos aprox.)
 LISTA_ATIVOS_PADRAO = [
     "PETR4", "VALE3", "ITUB4", "BBDC4", "ABEV3",
-    "BBAS3", "WEGE3", "B3SA3", "BOVA11", "ITSA4",
-    "LREN3", "SUZB3", "GGBR4", "BRFS3", "RAIL3",
-    "CMIG4", "HAPV3", "PRIO3", "UGPA3", "ELET3",
+    "BBAS3", "WEGE3", "PRIO3", "BOVA11", "SUZB3",
+    # "LREN3", "SUZB3", "GGBR4", "BRFS3", "RAIL3",
+    # "CMIG4", "HAPV3", "PRIO3", "UGPA3", "ELET3",
 ]
 
 
