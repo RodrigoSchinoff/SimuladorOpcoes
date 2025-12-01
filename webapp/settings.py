@@ -1,20 +1,22 @@
 from pathlib import Path
 import os
+import urllib.parse as urlparse
 from dotenv import load_dotenv
 
-# -------------------------------------------------------------------
-# BASE DIR & ENV
-# -------------------------------------------------------------------
+# --------------------------------------------------
+# BASE_DIR e .env
+# --------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Carrega variáveis do .env (para Windows, Mac e ambientes locais)
+# Carrega variáveis do .env (tanto no Mac quanto em produção, se existir)
 load_dotenv()
 
-# -------------------------------------------------------------------
-# SEGURANÇA
-# -------------------------------------------------------------------
+# --------------------------------------------------
+# Configurações básicas
+# --------------------------------------------------
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key-change-me")
-DEBUG = True
+
+DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
 
 ALLOWED_HOSTS = [
     "localhost",
@@ -23,9 +25,13 @@ ALLOWED_HOSTS = [
     "simuladorls.onrender.com",
 ]
 
-# -------------------------------------------------------------------
-# INSTALLED APPS
-# -------------------------------------------------------------------
+CSRF_TRUSTED_ORIGINS = [
+    "https://simuladorls.onrender.com",
+]
+
+# --------------------------------------------------
+# Aplicativos instalados
+# --------------------------------------------------
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -34,13 +40,13 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # App principal
+    # App do simulador web
     "simulador_web",
 ]
 
-# -------------------------------------------------------------------
-# MIDDLEWARE
-# -------------------------------------------------------------------
+# --------------------------------------------------
+# Middleware
+# --------------------------------------------------
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -51,15 +57,15 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-# -------------------------------------------------------------------
-# URLS & TEMPLATES
-# -------------------------------------------------------------------
 ROOT_URLCONF = "webapp.urls"
 
+# --------------------------------------------------
+# Templates
+# --------------------------------------------------
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],  # os templates dos apps serão encontrados automaticamente
+        "DIRS": [],  # usamos apenas os templates dos apps
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -74,49 +80,60 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "webapp.wsgi.application"
 
-# -------------------------------------------------------------------
-# DATABASE — APENAS POSTGRES (SEM FALLBACK)
-# -------------------------------------------------------------------
+# --------------------------------------------------
+# Banco de dados – APENAS Postgres via DATABASE_URL
+# --------------------------------------------------
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL não definido. "
+        "Configure a URL do Postgres no .env (Mac) ou nas variáveis de ambiente (Render)."
+    )
+
+urlparse.uses_netloc.append("postgres")
+url = urlparse.urlparse(DATABASE_URL)
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST"),
-        "PORT": os.getenv("DB_PORT", "5432"),
+        "NAME": url.path[1:],  # remove a barra inicial
+        "USER": url.username,
+        "PASSWORD": url.password,
+        "HOST": url.hostname,
+        "PORT": url.port or 5432,
     }
 }
 
-# Validação obrigatória — impede fallback para sqlite
-for key, value in DATABASES["default"].items():
-    if value in (None, "", []):
-        raise Exception(f"[ERRO] Variável de ambiente obrigatória ausente: {key}")
-
-# -------------------------------------------------------------------
-# PASSWORD VALIDATION
-# -------------------------------------------------------------------
+# --------------------------------------------------
+# Validação de senha
+# --------------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
 ]
 
-# -------------------------------------------------------------------
-# LOCALE / TIMEZONE
-# -------------------------------------------------------------------
+# --------------------------------------------------
+# Localização
+# --------------------------------------------------
 LANGUAGE_CODE = "pt-br"
 TIME_ZONE = "America/Sao_Paulo"
 USE_I18N = True
 USE_TZ = True
 
-# -------------------------------------------------------------------
-# STATIC FILES
-# -------------------------------------------------------------------
+# --------------------------------------------------
+# Arquivos estáticos (Render)
+# --------------------------------------------------
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# -------------------------------------------------------------------
-# DEFAULT FIELD TYPE
-# -------------------------------------------------------------------
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
