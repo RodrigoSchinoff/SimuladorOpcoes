@@ -25,8 +25,8 @@
             display: flex;
             flex-wrap: wrap;
             gap: 12px;
-            margin-bottom: 8px;
-            align-items: flex-end; /* <-- CORREÇÃO DO ALINHAMENTO */
+            margin-bottom: 4px;
+            align-items: flex-end;
         }
         .form-row label {
             font-size: 13px;
@@ -84,22 +84,6 @@
             margin-top: 6px;
         }
     </style>
-
-    <!-- Confirmação multi-ativos -->
-    <script>
-    function confirmarMultiAtivos() {
-        const ativo = document.getElementById("id_ativo");
-        if (ativo && ativo.value.trim() === "") {
-            return confirm(
-                "Você selecionou vários ativos.\n" +
-                "A consulta poderá demorar alguns segundos.\n" +
-                "Deseja continuar?"
-            );
-        }
-        return true;
-    }
-    </script>
-
 </head>
 <body>
 
@@ -116,16 +100,13 @@
         <div class="form-row">
 
             <!-- ATIVO -->
-            <div style="display:flex; flex-direction:column;">
+            <div style="display:flex; flex-direction:column; min-width:180px;">
                 <label for="id_ativo">Ativo</label>
                 <input type="text"
                        id="id_ativo"
                        name="ativo"
                        value="{{ ativo }}"
                        placeholder="Ex.: PETR4 (vazio = vários)">
-                <div style="font-size: 11px; color:#6b7280; margin-top:2px;">
-                    Deixe vazio para analisar vários ativos.
-                </div>
             </div>
 
             <!-- LOTE TOTAL -->
@@ -171,6 +152,11 @@
                 <button class="btn" type="submit" id="btn_rodar">Rodar Screener</button>
             </div>
 
+        </div>
+
+        <!-- OBS DO ATIVO (fora da linha, não atrapalha alinhamento) -->
+        <div style="font-size: 11px; color:#6b7280; margin-top:2px; margin-bottom:4px;">
+            Deixe vazio para analisar vários ativos.
         </div>
 
         {% if spot_oficial %}
@@ -226,10 +212,12 @@
                 <td class="text-right">{% if r.call_delta is not None %}{{ r.call_delta|floatformat:4 }}{% endif %}</td>
                 <td class="text-right">R$ {{ r.put_premio|floatformat:4 }}</td>
                 <td class="text-right">{% if r.put_delta is not None %}{{ r.put_delta|floatformat:4 }}{% endif %}</td>
-                <td>{{ r.due_date }}</td>
+                <!-- Vencimento: vamos formatar no JS para dd-mm-aaaa -->
+                <td class="col-venc">{{ r.due_date }}</td>
+                <!-- Custo operação: JS vai colocar ponto no milhar -->
                 <td class="text-right">{{ r.qty_call }}</td>
                 <td class="text-right">{{ r.qty_put }}</td>
-                <td class="text-right">R$ {{ r.custo_operacao|floatformat:2 }}</td>
+                <td class="text-right col-custo">R$ {{ r.custo_operacao|floatformat:2 }}</td>
             </tr>
         {% endfor %}
         </tbody>
@@ -238,17 +226,15 @@
 {% endif %}
 
 
-<!-- SCRIPT FINAL CORRIGIDO -->
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
-    const form = document.getElementById("ls_form");
+    const form = document.querySelector("form");
     const btn = document.getElementById("btn_rodar");
     const status = document.getElementById("status_msg");
     const horiz = document.getElementById("id_horizonte");
     const crush = document.getElementById("id_crush_iv");
 
-    // Ativar/desativar campo Crush IV
     function syncCrushField() {
         if (horiz.value === "D+1") {
             crush.disabled = false;
@@ -261,13 +247,7 @@ document.addEventListener("DOMContentLoaded", function () {
     syncCrushField();
     horiz.addEventListener("change", syncCrushField);
 
-    // SUBMIT CORRIGIDO
-    form.addEventListener("submit", function(ev) {
-        if (!confirmarMultiAtivos()) {
-            ev.preventDefault();
-            return false;
-        }
-
+    form.addEventListener("submit", function () {
         if (status) status.textContent = "Processando screener...";
         btn.disabled = true;
         btn.textContent = "Processando...";
@@ -276,6 +256,28 @@ document.addEventListener("DOMContentLoaded", function () {
         if (card) card.style.opacity = "0.3";
     });
 
+    // ---- FORMATAÇÃO VENCIMENTO: AAAA-MM-DD -> DD-MM-AAAA ----
+    const vencTds = document.querySelectorAll("td.col-venc");
+    vencTds.forEach(function(td) {
+        const v = td.textContent.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+            const parts = v.split("-");
+            td.textContent = parts[2] + "-" + parts[1] + "-" + parts[0];
+        }
+    });
+
+    // ---- FORMATAÇÃO CUSTO OPERAÇÃO: milhar com ponto, decimal com vírgula ----
+    const custoTds = document.querySelectorAll("td.col-custo");
+    custoTds.forEach(function(td) {
+        let txt = td.textContent.trim(); // ex: "R$ 13929,69" ou "R$ 13929.69"
+        txt = txt.replace(/\s+/g, "");   // "R$13929,69"
+        const m = txt.match(/^R\$(\d+)[.,](\d{2})$/);
+        if (!m) return;
+        let intPart = m[1];
+        const decPart = m[2];
+        intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        td.textContent = "R$ " + intPart + "," + decPart;
+    });
 
 });
 </script>

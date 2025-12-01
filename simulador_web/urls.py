@@ -1,7 +1,7 @@
 from django.urls import path
-from .views import home, long_straddle
+from .views import long_straddle
 
 urlpatterns = [
-    path('', home, name='home'),
-    path('ls/', long_straddle, name='long_straddle'),
+    path("", long_straddle, name="long_straddle"),  # /  -> LS
+    path("ls/", long_straddle, name="ls"),          # /ls/ -> LS (atalho)
 ]

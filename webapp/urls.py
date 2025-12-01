@@ -3,5 +3,5 @@ from django.urls import path, include
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", include("simulador_web.urls")),
+    path("", include("simulador_web.urls")),  # raiz manda para o app simulador_web
 ]
