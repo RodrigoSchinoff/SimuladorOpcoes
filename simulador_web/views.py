@@ -408,3 +408,46 @@ async def long_straddle(request):
         }
 
     return render(request, "simulador_web/long_straddle.html", contexto)
+
+# =========================================================
+# CEDRO – ROTA DE TESTE (ISOLADA, NÃO AFETA O LS ATUAL)
+# =========================================================
+from django.http import JsonResponse
+from .services.api_cedro.snapshot_ls import get_snapshot_ls
+
+def cedro_teste(request, ativo):
+    """
+    Teste Cedro: SQT N + GSO (vencimento atual e próximo).
+    NÃO interfere no simulador LS atual.
+    Ajuste os vencimentos para datas reais antes de usar em produção.
+    """
+    # EXEMPLOS – ajuste para vencimentos reais
+    VENC_ATUAL = "202510"   # AAAAMM
+    VENC_PROX = "202511"
+
+    try:
+        dados = get_snapshot_ls(ativo, VENC_ATUAL, VENC_PROX)
+        return JsonResponse(dados, safe=False)
+    except Exception as ex:
+        return JsonResponse({"erro": str(ex)}, status=500)
+
+
+
+from django.http import HttpResponse
+from .services.api_cedro.debug_client import CedroClientDebug
+import time
+
+
+def cedro_debug(request):
+    """
+    Debug da Cedro: conecta via CD3Connector, envia 'sqt petr4'
+    e imprime tudo que chegar no console do servidor.
+    """
+    client = CedroClientDebug()
+    client.start()
+
+    # espera alguns segundos para chegar mensagem
+    time.sleep(3)
+
+    client.stop()
+    return HttpResponse("Verifique o console do servidor (runserver) para as linhas 'RECEBIDO: ...'")

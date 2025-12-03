@@ -1,0 +1,189 @@
+2025-12-03 15:46:15: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 15:46:15: [INFO] Connecting to address: datafeed2.cedrotech.com
+2025-12-03 15:46:15: [INFO] Socket connected to datafeed2.cedrotech.com
+2025-12-03 15:46:15: [INFO] Connected to Diffuser.
+2025-12-03 15:46:33: [INFO] Command sent: SYN
+2025-12-03 15:46:53: [INFO] Command sent: SYN
+2025-12-03 15:47:13: [INFO] Command sent: SYN
+2025-12-03 15:47:33: [INFO] Command sent: SYN
+2025-12-03 15:47:53: [INFO] Command sent: SYN
+2025-12-03 15:48:13: [INFO] Command sent: SYN
+2025-12-03 15:48:33: [INFO] Command sent: SYN
+2025-12-03 15:48:53: [INFO] Command sent: SYN
+2025-12-03 15:49:13: [INFO] Command sent: SYN
+2025-12-03 15:49:33: [INFO] Command sent: SYN
+2025-12-03 15:49:53: [INFO] Command sent: SYN
+2025-12-03 15:50:13: [INFO] Command sent: SYN
+2025-12-03 15:50:33: [INFO] Command sent: SYN
+2025-12-03 15:50:53: [INFO] Command sent: SYN
+2025-12-03 15:51:13: [INFO] Command sent: SYN
+2025-12-03 15:51:33: [INFO] Command sent: SYN
+2025-12-03 15:51:53: [INFO] Command sent: SYN
+2025-12-03 15:52:13: [INFO] Command sent: SYN
+2025-12-03 15:52:33: [INFO] Command sent: SYN
+2025-12-03 15:52:53: [INFO] Command sent: SYN
+2025-12-03 15:53:13: [INFO] Command sent: SYN
+2025-12-03 15:53:33: [INFO] Command sent: SYN
+2025-12-03 15:53:53: [INFO] Command sent: SYN
+2025-12-03 15:54:13: [INFO] Command sent: SYN
+2025-12-03 15:54:33: [INFO] Command sent: SYN
+2025-12-03 16:00:57: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 16:00:57: [INFO] Connecting to address: datafeed2.cedrotech.com
+2025-12-03 16:00:58: [INFO] Socket connected to datafeed2.cedrotech.com
+2025-12-03 16:00:58: [INFO] Connected to Diffuser.
+2025-12-03 16:01:02: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 16:01:02: [INFO] Connecting to address: datafeed1.cedrotech.com
+2025-12-03 16:01:02: [INFO] Socket connected to datafeed1.cedrotech.com
+2025-12-03 16:01:03: [INFO] Connected to Diffuser.
+2025-12-03 16:01:03: [ERROR] Critical error received (E:6 Duplicate Login). Closing connection.
+2025-12-03 16:01:03: [INFO] Stopping the connection...
+2025-12-03 16:01:03: [WARNING] Destroying the connector instance...
+2025-12-03 16:01:03: [WARNING] Connector instance destroyed. It cannot be restarted.
+2025-12-03 16:01:03: [INFO] Connection stopped.
+2025-12-03 16:01:03: [ERROR] Exception in receiving: argument must be an int, or have a fileno() method.
+2025-12-03 16:01:03: [WARNING] This CD3Connector instance has been destroyed and cannot be used
+2025-12-03 16:01:03: [WARNING] This CD3Connector instance has been destroyed and cannot be used
+2025-12-03 16:01:14: [INFO] Command sent: SYN
+2025-12-03 16:01:26: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 16:01:26: [INFO] Connecting to address: datafeed1.cedrotech.com
+2025-12-03 16:01:26: [INFO] Socket connected to datafeed1.cedrotech.com
+2025-12-03 16:01:27: [INFO] Connected to Diffuser.
+2025-12-03 16:01:27: [ERROR] Critical error received (E:6 Duplicate Login). Closing connection.
+2025-12-03 16:01:27: [INFO] Stopping the connection...
+2025-12-03 16:01:27: [WARNING] Destroying the connector instance...
+2025-12-03 16:01:27: [WARNING] Connector instance destroyed. It cannot be restarted.
+2025-12-03 16:01:27: [INFO] Connection stopped.
+2025-12-03 16:01:27: [WARNING] This CD3Connector instance has been destroyed and cannot be used
+2025-12-03 16:01:27: [ERROR] Exception in receiving: This CD3Connector instance has been destroyed and cannot be used.
+2025-12-03 16:01:27: [WARNING] This CD3Connector instance has been destroyed and cannot be used
+2025-12-03 16:01:53: [INFO] Command sent: SYN
+2025-12-03 16:02:13: [INFO] Command sent: SYN
+2025-12-03 16:02:33: [INFO] Command sent: SYN
+2025-12-03 16:02:53: [INFO] Command sent: SYN
+2025-12-03 16:03:13: [INFO] Command sent: SYN
+2025-12-03 16:03:33: [INFO] Command sent: SYN
+2025-12-03 16:36:38: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 16:38:05: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 16:44:08: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 16:44:08: [INFO] Connecting to address: datafeed1.cedrotech.com
+2025-12-03 16:44:08: [INFO] Socket connected to datafeed1.cedrotech.com
+2025-12-03 16:44:08: [INFO] Connected to Diffuser.
+2025-12-03 16:44:08: [INFO] Command sent: sqt petr4
+2025-12-03 16:44:18: [INFO] Command sent: SYN
+2025-12-03 16:44:29: [INFO] Command sent: SYN
+2025-12-03 16:44:39: [INFO] Command sent: SYN
+2025-12-03 16:44:49: [INFO] Command sent: SYN
+2025-12-03 16:45:00: [INFO] Command sent: SYN
+2025-12-03 16:45:10: [INFO] Command sent: SYN
+2025-12-03 16:45:23: [INFO] Command sent: SYN
+2025-12-03 16:45:33: [INFO] Command sent: SYN
+2025-12-03 16:45:44: [INFO] Command sent: SYN
+2025-12-03 16:45:54: [INFO] Command sent: SYN
+2025-12-03 16:46:05: [INFO] Command sent: SYN
+2025-12-03 16:46:15: [INFO] Command sent: SYN
+2025-12-03 17:02:01: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 17:02:01: [INFO] Connecting to address: datafeed2.cedrotech.com
+2025-12-03 17:02:01: [INFO] Socket connected to datafeed2.cedrotech.com
+2025-12-03 17:02:01: [INFO] Connected to Diffuser.
+2025-12-03 17:02:01: [INFO] Command sent: gso petr4
+2025-12-03 17:02:14: [INFO] Command sent: SYN
+2025-12-03 17:02:34: [INFO] Command sent: SYN
+2025-12-03 17:02:54: [INFO] Command sent: SYN
+2025-12-03 17:03:14: [INFO] Command sent: SYN
+2025-12-03 17:03:34: [INFO] Command sent: SYN
+2025-12-03 17:16:40: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 17:16:40: [INFO] Connecting to address: datafeed1.cedrotech.com
+2025-12-03 17:16:40: [INFO] Socket connected to datafeed1.cedrotech.com
+2025-12-03 17:16:41: [INFO] Connected to Diffuser.
+2025-12-03 17:16:41: [INFO] Command sent: GSO 001 PETR 12 2025
+2025-12-03 17:16:43: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 17:16:43: [INFO] Connecting to address: datafeed2.cedrotech.com
+2025-12-03 17:16:43: [INFO] Socket connected to datafeed2.cedrotech.com
+2025-12-03 17:16:44: [INFO] Connected to Diffuser.
+2025-12-03 17:16:44: [ERROR] Critical error received (E:6 Duplicate Login). Closing connection.
+2025-12-03 17:16:44: [INFO] Stopping the connection...
+2025-12-03 17:16:44: [INFO] Command sent: GSO 001 PETR 12 2025
+2025-12-03 17:16:44: [WARNING] Destroying the connector instance...
+2025-12-03 17:16:44: [WARNING] Connector instance destroyed. It cannot be restarted.
+2025-12-03 17:16:44: [INFO] Connection stopped.
+2025-12-03 17:16:44: [ERROR] Exception in receiving: argument must be an int, or have a fileno() method.
+2025-12-03 17:16:44: [WARNING] This CD3Connector instance has been destroyed and cannot be used
+2025-12-03 17:16:53: [INFO] Command sent: SYN
+2025-12-03 17:17:15: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 17:17:15: [INFO] Connecting to address: datafeed2.cedrotech.com
+2025-12-03 17:17:15: [INFO] Socket connected to datafeed2.cedrotech.com
+2025-12-03 17:17:16: [INFO] Connected to Diffuser.
+2025-12-03 17:17:16: [INFO] Command sent: GSO 001 PETR 12 2025
+2025-12-03 17:17:33: [INFO] Command sent: SYN
+2025-12-03 17:18:11: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 17:18:11: [INFO] Connecting to address: datafeed2.cedrotech.com
+2025-12-03 17:18:11: [INFO] Socket connected to datafeed2.cedrotech.com
+2025-12-03 17:18:11: [INFO] Connected to Diffuser.
+2025-12-03 17:18:11: [INFO] Command sent: GSO 001 PETR 12 2025
+2025-12-03 17:18:34: [INFO] Command sent: SYN
+2025-12-03 17:18:54: [INFO] Command sent: SYN
+2025-12-03 17:19:14: [INFO] Command sent: SYN
+2025-12-03 17:19:34: [INFO] Command sent: SYN
+2025-12-03 17:19:54: [INFO] Command sent: SYN
+2025-12-03 17:20:14: [INFO] Command sent: SYN
+2025-12-03 17:20:34: [INFO] Command sent: SYN
+2025-12-03 17:20:54: [INFO] Command sent: SYN
+2025-12-03 17:21:14: [INFO] Command sent: SYN
+2025-12-03 17:21:34: [INFO] Command sent: SYN
+2025-12-03 17:21:54: [INFO] Command sent: SYN
+2025-12-03 17:22:14: [INFO] Command sent: SYN
+2025-12-03 17:22:34: [INFO] Command sent: SYN
+2025-12-03 17:24:14: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 17:24:14: [INFO] Connecting to address: datafeed1.cedrotech.com
+2025-12-03 17:24:14: [INFO] Socket connected to datafeed1.cedrotech.com
+2025-12-03 17:24:14: [INFO] Connected to Diffuser.
+2025-12-03 17:24:14: [INFO] Command sent: GSO 001 PETR4 12 2025
+2025-12-03 17:24:15: [INFO] CD3Connector initialized for user 'schinoff-socket'
+2025-12-03 17:24:15: [INFO] Connecting to address: datafeed2.cedrotech.com
+2025-12-03 17:24:15: [INFO] Socket connected to datafeed2.cedrotech.com
+2025-12-03 17:24:15: [ERROR] Critical error received (E:6 Duplicate Login). Closing connection.
+2025-12-03 17:24:15: [INFO] Stopping the connection...
+2025-12-03 17:24:15: [WARNING] Destroying the connector instance...
+2025-12-03 17:24:15: [WARNING] Connector instance destroyed. It cannot be restarted.
+2025-12-03 17:24:15: [INFO] Connection stopped.
+2025-12-03 17:24:15: [ERROR] Exception in receiving: argument must be an int, or have a fileno() method.
+2025-12-03 17:24:15: [WARNING] This CD3Connector instance has been destroyed and cannot be used
+2025-12-03 17:24:15: [INFO] Connected to Diffuser.
+2025-12-03 17:24:15: [INFO] Command sent: GSO 001 PETR4 12 2025
+2025-12-03 17:24:33: [INFO] Command sent: SYN
+2025-12-03 17:24:53: [INFO] Command sent: SYN
+2025-12-03 17:25:13: [INFO] Command sent: SYN
+2025-12-03 17:25:33: [INFO] Command sent: SYN
+2025-12-03 17:25:53: [INFO] Command sent: SYN
+2025-12-03 17:26:13: [INFO] Command sent: SYN
+2025-12-03 17:26:33: [INFO] Command sent: SYN
+2025-12-03 17:26:53: [INFO] Command sent: SYN
+2025-12-03 17:27:13: [INFO] Command sent: SYN
+2025-12-03 17:27:33: [INFO] Command sent: SYN
+2025-12-03 17:27:53: [INFO] Command sent: SYN
+2025-12-03 17:28:13: [INFO] Command sent: SYN
+2025-12-03 17:28:33: [INFO] Command sent: SYN
+2025-12-03 17:28:53: [INFO] Command sent: SYN
+2025-12-03 17:29:13: [INFO] Command sent: SYN
+2025-12-03 17:29:33: [INFO] Command sent: SYN
+2025-12-03 17:29:53: [INFO] Command sent: SYN
+2025-12-03 17:30:13: [INFO] Command sent: SYN
+2025-12-03 17:30:33: [INFO] Command sent: SYN
+2025-12-03 17:30:53: [INFO] Command sent: SYN
+2025-12-03 17:31:13: [INFO] Command sent: SYN
+2025-12-03 17:31:33: [INFO] Command sent: SYN
+2025-12-03 17:31:53: [INFO] Command sent: SYN
+2025-12-03 17:32:13: [INFO] Command sent: SYN
+2025-12-03 17:32:33: [INFO] Command sent: SYN
+2025-12-03 17:32:53: [INFO] Command sent: SYN
+2025-12-03 17:33:13: [INFO] Command sent: SYN
+2025-12-03 17:33:33: [INFO] Command sent: SYN
+2025-12-03 17:33:53: [INFO] Command sent: SYN
+2025-12-03 17:34:13: [INFO] Command sent: SYN
+2025-12-03 17:34:33: [INFO] Command sent: SYN
+2025-12-03 17:34:53: [INFO] Command sent: SYN
+2025-12-03 17:35:13: [INFO] Command sent: SYN
+2025-12-03 17:35:33: [INFO] Command sent: SYN
+2025-12-03 17:35:53: [INFO] Command sent: SYN
+2025-12-03 17:36:13: [INFO] Command sent: SYN
+2025-12-03 17:36:33: [INFO] Command sent: SYN
