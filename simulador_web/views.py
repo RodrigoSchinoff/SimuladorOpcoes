@@ -5,19 +5,23 @@ from simulacoes.long_straddle import simular_long_straddle
 from simulacoes.black_scholes import black_scholes, implied_vol
 
 from core.app_core import atualizar_e_screener_atm_2venc
-from services.api import buscar_detalhes_opcao, get_spot_ativo_oficial
+# REMOVIDO: buscar_detalhes_opcao, get_spot_ativo_oficial (OPLAB)
+# from services.api import buscar_detalhes_opcao, get_spot_ativo_oficial
+
+# CEDRO
+from .services.cedro_service import CedroService
+
+
+
 
 import os
 
 LOT_MIN = 100
 DEFAULT_TOTAL_LOT = 10000
 
-# Lista padrão de ativos (20 mais líquidos aprox.)
 LISTA_ATIVOS_PADRAO = [
     "PETR4", "VALE3", "ITUB4", "BBDC4", "ABEV3",
     "BBAS3", "WEGE3", "PRIO3", "BOVA11", "SUZB3",
-    # "LREN3", "SUZB3", "GGBR4", "BRFS3", "RAIL3",
-    # "CMIG4", "HAPV3", "PRIO3", "UGPA3", "ELET3",
 ]
 
 
@@ -47,7 +51,7 @@ def _round_lots(call_raw, put_raw, total):
     rem = total - (c + p)
     while rem >= LOT_MIN:
         frac_c = (call_raw - c)
-        frac_p = (put_raw - p)
+        frac_p = (call_raw - c)
         if frac_c >= frac_p:
             c += LOT_MIN
         else:
@@ -61,12 +65,10 @@ def home(request):
 
 
 # =========================================================
-# LONG STRADDLE – VIEW PRINCIPAL
+# LONG STRADDLE – AGORA 100% VIA CEDRO (SQT + GSO)
 # =========================================================
 async def long_straddle(request):
-    # ---------------------------------------------------------------------
-    # se não há parâmetros, retorna tela vazia sem rodar
-    # ---------------------------------------------------------------------
+
     if not request.GET:
         return render(request, "simulador_web/long_straddle.html", {
             "resultado": None,
@@ -82,9 +84,6 @@ async def long_straddle(request):
             "aviso_horizonte": None,
         })
 
-    # -----------------------------
-    # PARÂMETROS DO FORM
-    # -----------------------------
     ativo = (request.GET.get("ativo") or "").upper().strip()
     lote_total_raw = request.GET.get("lote_total") or str(DEFAULT_TOTAL_LOT)
     horizonte = request.GET.get("horizonte") or "Vencimento"
@@ -97,24 +96,22 @@ async def long_straddle(request):
     be_max_pct_raw = request.GET.get("be_max_pct")
     be_max_pct = float(be_max_pct_raw) if be_max_pct_raw else None
 
+    # 🔥 Instância Cedro
+    service = CedroService()
+
     try:
-        # ------------------------------------------------------
-        # 1) DEFINIR QUAIS ATIVOS VÃO SER PROCESSADOS
-        # ------------------------------------------------------
         if ativo:
             tickers = [ativo]
         else:
             tickers = LISTA_ATIVOS_PADRAO[:]
 
         # ------------------------------------------------------
-        # 2) RODAR SCREENER PARA CADA TICKER (ASSÍNCRONO)
+        # 2) Screener ATM
         # ------------------------------------------------------
         import asyncio
-
         linhas_atm = []
 
         async def run_screener(tkr):
-            # usa cache de screener ATM (2 vencimentos)
             return await asyncio.to_thread(atualizar_e_screener_atm_2venc, tkr, False)
 
         resultados = await asyncio.gather(*[run_screener(t) for t in tickers], return_exceptions=True)
@@ -131,49 +128,53 @@ async def long_straddle(request):
         if not linhas_atm:
             raise ValueError("Nenhuma linha ATM retornada pelo screener.")
 
-        # ------------------------------------------------------
-        # ORDENAR SIMPLES POR TICKER
-        # ------------------------------------------------------
         linhas_atm.sort(key=lambda r: r.get("ticker", ""))
 
         # ------------------------------------------------------
-        # 3) SPOT OFICIAL
-        #    - se 1 ativo: spot_uni = spot oficial desse ativo
-        #    - se vários: obtém spot oficial 1x por ticker
+        # 3) NOVO SPOT OFICIAL (SQT Cedro)
         # ------------------------------------------------------
         spot_uni = None
         spots_oficiais = {}
 
         if len(tickers) == 1:
-            # caso 1 ativo: exatamente como no Flet
             try:
-                spot_uni = get_spot_ativo_oficial(tickers[0])
-            except Exception:
+                sqt = service.get_spot_via_sqt(tickers[0])
+                spot_uni = _to_float(sqt.get("last") or sqt.get("price") or sqt.get("spot"))
+            except:
                 spot_uni = None
-            if spot_uni is None and linhas_atm:
+
+            if not spot_uni and linhas_atm:
                 spot_uni = _to_float(linhas_atm[0].get("spot"))
-            spot_uni = _to_float(spot_uni) if spot_uni is not None else 0.0
+
             if spot_uni:
                 spots_oficiais[tickers[0]] = spot_uni
         else:
-            # multi-ativos: 1 chamada por ticker, não por linha
             for tkr in tickers:
                 try:
-                    so = get_spot_ativo_oficial(tkr)
-                    if so is not None:
-                        spots_oficiais[tkr] = _to_float(so)
-                except Exception:
+                    sqt = service.get_spot_via_sqt(tkr)
+                    so = _to_float(sqt.get("last") or sqt.get("price") or sqt.get("spot"))
+                    if so:
+                        spots_oficiais[tkr] = so
+                except:
                     continue
 
-        # injeta spot_oficial em cada linha, se existir para o ticker
         for r in linhas_atm:
             tkr = r.get("ticker")
             if tkr in spots_oficiais:
                 r["spot_oficial"] = spots_oficiais[tkr]
 
         # ------------------------------------------------------
-        # 4) D+1 + CRUSH IV – MESMA LÓGICA DO FLET (implied_vol)
-        #    usando SEMPRE o spot oficial (quando disponível)
+        # 4) DETALHES DE OPÇÕES AGORA VIA GSO CEDRO
+        # ------------------------------------------------------
+        detalhes_opcoes = {}
+        for tkr in tickers:
+            try:
+                detalhes_opcoes[tkr] = service.get_opcoes_via_gso(tkr)
+            except:
+                detalhes_opcoes[tkr] = []
+
+        # ------------------------------------------------------
+        # 4) D+1 + BS (mesmo código — SOMENTE troca o fonte dos detalhes)
         # ------------------------------------------------------
         if horizonte == "D+1" and linhas_atm:
 
@@ -192,93 +193,78 @@ async def long_straddle(request):
                 try:
                     iv = implied_vol(preco, S, K, r, 0.0, T, kind)
                     return max(0.0001, iv) if iv else 0.0001
-                except Exception:
+                except:
                     return 0.0001
 
             def _T_years(days_val):
                 try:
                     dias = max(1, int(_to_float(days_val, 1)))
                     return dias / 252.0
-                except Exception:
+                except:
                     return 1.0 / 252.0
 
             crush = crush_iv
             f = max(0.0, 1.0 - crush / 100.0)
             r_aa = _to_float(os.getenv("SELIC_AA", "10.0")) / 100.0
 
-            # pequeno cache local de detalhes (não muda o resultado)
-            detalhes_cache = {}
-
             for r in linhas_atm:
+                tkr = r["ticker"]
                 call_sym = r.get("call")
                 put_sym = r.get("put")
+
                 if not (call_sym and put_sym):
                     continue
+
+                # PEGAR DETALHES VIA CEDRO
+                lista = detalhes_opcoes.get(tkr, [])
+
                 try:
-                    # detalhes CALL com cache
-                    if call_sym in detalhes_cache:
-                        cd = detalhes_cache[call_sym]
-                    else:
-                        cd = buscar_detalhes_opcao(call_sym)
-                        detalhes_cache[call_sym] = cd
-
-                    # detalhes PUT com cache
-                    if put_sym in detalhes_cache:
-                        pd = detalhes_cache[put_sym]
-                    else:
-                        pd = buscar_detalhes_opcao(put_sym)
-                        detalhes_cache[put_sym] = pd
-
-                    # SPOT:
-                    # - se 1 ativo → spot_uni (oficial)
-                    # - senão → spot_oficial da linha (preenchido acima)
-                    if spot_uni and spot_uni > 0:
-                        S = spot_uni
-                    else:
-                        S = _to_float(r.get("spot_oficial"))
-
-                        # fallback de segurança (não ideal, mas evita quebrar)
-                        if not S:
-                            S = _to_float(cd.get("spot_price") or pd.get("spot_price") or r.get("spot"))
-
-                    Kc = _to_float(cd.get("strike"))
-                    Kp = _to_float(pd.get("strike"))
-                    Tc = _T_years(cd.get("days_to_maturity"))
-                    Tp = _T_years(pd.get("days_to_maturity"))
-                    Tc1 = max(Tc - 1 / 252.0, 1e-6)
-                    Tp1 = max(Tp - 1 / 252.0, 1e-6)
-
-                    Pc_mkt = _mid(cd)
-                    Pp_mkt = _mid(pd)
-
-                    # IV original (como no Flet)
-                    sig_c = _implied_or_min(Pc_mkt, S, Kc, r_aa, Tc, "CALL")
-                    sig_p = _implied_or_min(Pp_mkt, S, Kp, r_aa, Tp, "PUT")
-
-                    # aplica Crush IV
-                    sig_c1 = max(1e-4, sig_c * f)
-                    sig_p1 = max(1e-4, sig_p * f)
-
-                    # preço D+1 com BS
-                    Pc1 = black_scholes(S, Kc, r_aa, 0.0, sig_c1, Tc1, "CALL")["preco"]
-                    Pp1 = black_scholes(S, Kp, r_aa, 0.0, sig_p1, Tp1, "PUT")["preco"]
-
-                    r["call_premio"] = Pc1
-                    r["put_premio"] = Pp1
-                    r["premium_total"] = Pc1 + Pp1
-                    r["be_down"] = round(Kp - (Pc1 + Pp1), 4)
-                    r["be_up"] = round(Kc + (Pc1 + Pp1), 4)
-                    r["spot"] = S  # spot efetivamente utilizado
-
-                except Exception:
+                    cd = next(o for o in lista if o.get("symbol") == call_sym)
+                    pd = next(o for o in lista if o.get("symbol") == put_sym)
+                except StopIteration:
                     continue
+
+                # SPOT
+                if spot_uni and spot_uni > 0:
+                    S = spot_uni
+                else:
+                    S = _to_float(r.get("spot_oficial") or 0.0)
+
+                if not S:
+                    S = _to_float(cd.get("spot") or cd.get("price") or r.get("spot"))
+
+                Kc = _to_float(cd.get("strike"))
+                Kp = _to_float(pd.get("strike"))
+                Tc = _T_years(cd.get("days_to_maturity"))
+                Tp = _T_years(pd.get("days_to_maturity"))
+                Tc1 = max(Tc - 1 / 252.0, 1e-6)
+                Tp1 = max(Tp - 1 / 252.0, 1e-6)
+
+                Pc_mkt = _mid(cd)
+                Pp_mkt = _mid(pd)
+
+                sig_c = _implied_or_min(Pc_mkt, S, Kc, r_aa, Tc, "CALL")
+                sig_p = _implied_or_min(Pp_mkt, S, Kp, r_aa, Tp, "PUT")
+
+                sig_c1 = max(1e-4, sig_c * f)
+                sig_p1 = max(1e-4, sig_p * f)
+
+                Pc1 = black_scholes(S, Kc, r_aa, 0.0, sig_c1, Tc1, "CALL")["preco"]
+                Pp1 = black_scholes(S, Kp, r_aa, 0.0, sig_p1, Tp1, "PUT")["preco"]
+
+                r["call_premio"] = Pc1
+                r["put_premio"] = Pp1
+                r["premium_total"] = Pc1 + Pp1
+                r["be_down"] = round(Kp - (Pc1 + Pp1), 4)
+                r["be_up"] = round(Kc + (Pc1 + Pp1), 4)
+                r["spot"] = S
 
             aviso_horizonte = f"Cálculo D+1 aplicado com Crush IV de {crush_iv:.1f}%."
         else:
             aviso_horizonte = None
 
         # ------------------------------------------------------
-        # 5) ENRIQUECER – lotes, custo, BE% usando spot oficial
+        # 5) ENRIQUECER – (IGUAL AO ORIGINAL)
         # ------------------------------------------------------
         linhas_enriquecidas = []
         for r in linhas_atm:
@@ -314,8 +300,6 @@ async def long_straddle(request):
             r["qty_put"] = qty_put
             r["custo_operacao"] = custo_oper
 
-            # spot de referência para BE%:
-            # prioridade: spot_oficial da linha → spot_uni → spot da linha
             if r.get("spot_oficial") is not None:
                 spot_ref = _to_float(r.get("spot_oficial"))
             elif spot_uni and spot_uni > 0:
@@ -336,7 +320,7 @@ async def long_straddle(request):
             linhas_enriquecidas.append(r)
 
         # ------------------------------------------------------
-        # 6) FILTROS
+        # 6) FILTROS (IGUAL)
         # ------------------------------------------------------
         if be_max_pct is not None:
             linhas_enriquecidas = [
@@ -365,14 +349,20 @@ async def long_straddle(request):
             raise ValueError("Nenhuma opção após filtros.")
 
         # ------------------------------------------------------
-        # 7) SIMULAÇÃO – usa sempre a primeira linha filtrada
+        # 7) SIMULAÇÃO – DETALHES VIA CEDRO
         # ------------------------------------------------------
         primeira = linhas_enriquecidas[0]
-        call0 = buscar_detalhes_opcao(primeira["call"])
-        put0 = buscar_detalhes_opcao(primeira["put"])
+        tkr = primeira["ticker"]
+        lista = detalhes_opcoes.get(tkr, [])
+
+        try:
+            call0 = next(o for o in lista if o.get("symbol") == primeira["call"])
+            put0 = next(o for o in lista if o.get("symbol") == primeira["put"])
+        except:
+            raise ValueError("Não localizei detalhes via Cedro para CALL/PUT selecionadas.")
+
         resultado = simular_long_straddle(call0, put0, renderizar=False)
 
-        # spot da simulação: se tiver spot oficial único, usa; senão usa spot da linha
         if spot_uni:
             resultado["spot"] = float(spot_uni)
         else:
@@ -409,22 +399,17 @@ async def long_straddle(request):
 
     return render(request, "simulador_web/long_straddle.html", contexto)
 
+
+
 # =========================================================
-# CEDRO – ROTA DE TESTE (ISOLADA, NÃO AFETA O LS ATUAL)
+# CEDRO – ROTAS DE TESTE (INALTERADAS)
 # =========================================================
 from django.http import JsonResponse
 from .services.api_cedro.snapshot_ls import get_snapshot_ls
 
 def cedro_teste(request, ativo):
-    """
-    Teste Cedro: SQT N + GSO (vencimento atual e próximo).
-    NÃO interfere no simulador LS atual.
-    Ajuste os vencimentos para datas reais antes de usar em produção.
-    """
-    # EXEMPLOS – ajuste para vencimentos reais
-    VENC_ATUAL = "202510"   # AAAAMM
+    VENC_ATUAL = "202510"
     VENC_PROX = "202511"
-
     try:
         dados = get_snapshot_ls(ativo, VENC_ATUAL, VENC_PROX)
         return JsonResponse(dados, safe=False)
@@ -432,22 +417,13 @@ def cedro_teste(request, ativo):
         return JsonResponse({"erro": str(ex)}, status=500)
 
 
-
 from django.http import HttpResponse
 from .services.api_cedro.debug_client import CedroClientDebug
 import time
 
-
 def cedro_debug(request):
-    """
-    Debug da Cedro: conecta via CD3Connector, envia 'sqt petr4'
-    e imprime tudo que chegar no console do servidor.
-    """
     client = CedroClientDebug()
     client.start()
-
-    # espera alguns segundos para chegar mensagem
     time.sleep(3)
-
     client.stop()
-    return HttpResponse("Verifique o console do servidor (runserver) para as linhas 'RECEBIDO: ...'")
+    return HttpResponse("Verifique o console do servidor.")
