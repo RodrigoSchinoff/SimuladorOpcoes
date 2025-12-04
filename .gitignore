@@ -15,3 +15,6 @@ db.sqlite3
 
 # Virtual environment
 .venv/
+
+# Logs do conector Cedro (não confundir com o pacote pip)
+cd3_connector/
