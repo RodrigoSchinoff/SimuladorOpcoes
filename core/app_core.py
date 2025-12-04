@@ -19,7 +19,7 @@ _screener_cache = {}
 def atualizar_e_screener_atm_2venc(
     ticker: str,
     refresh: bool = False,
-    params: dict | None = None  # << NOVO
+    params: dict | None = None
 ) -> dict:
     from datetime import date
     import calendar, os
@@ -31,30 +31,34 @@ def atualizar_e_screener_atm_2venc(
     from repositories.opcoes_repo import precisa_refresh_por_data, tentar_lock_ticker, liberar_lock_ticker
     from services.api import buscar_opcoes_ativo
 
-    # parâmetros de horizonte + crush (podem ser None)
+    # -------------------------
+    # HORIZONTE + CRUSH
+    # -------------------------
     horizonte = (params or {}).get("horizonte")
     crush_iv = float((params or {}).get("crush_iv") or 0.0)
 
     try:
         ttl_min = int(os.getenv("TTL_SCREENER_MIN", "10"))
-    except Exception:
+    except:
         ttl_min = 10
 
     try:
         result_ttl_min = int(os.getenv("TTL_SCREENER_RESULT_MIN", "5"))
-    except Exception:
+    except:
         result_ttl_min = 5
 
     exec_id = f"AC-{uuid.uuid4().hex[:6]}"
     t0 = time.perf_counter()
+
     print(
-        f"[{exec_id}] START atualizar_e_screener_atm_2venc "
-        f"ticker={ticker} refresh={refresh} ttl_min={ttl_min} result_ttl_min={result_ttl_min} "
-        f"horizonte={horizonte} crush_iv={crush_iv}",
-        flush=True,
+        f"[{exec_id}] START atualizar_e_screener_atm_2venc ticker={ticker} refresh={refresh} "
+        f"ttl_min={ttl_min} result_ttl_min={result_ttl_min} horizonte={horizonte} crush_iv={crush_iv}",
+        flush=True
     )
 
-    # -------- helpers --------
+    # -------------------------
+    # HELPERS (inalterados)
+    # -------------------------
     def _third_friday(d: date) -> date:
         c = calendar.Calendar(firstweekday=calendar.MONDAY)
         fridays = [day for day in c.itermonthdates(d.year, d.month)
@@ -89,7 +93,7 @@ def atualizar_e_screener_atm_2venc(
             n = len(xs)
             med = xs[n // 2] if n % 2 else 0.5 * (xs[n // 2 - 1] + xs[n // 2])
             return round(float(med), 2)
-        except Exception:
+        except:
             return None
 
     def _spot_preferir_bs(tkr: str, payload_opcoes) -> float | None:
@@ -97,19 +101,19 @@ def atualizar_e_screener_atm_2venc(
             from services.api import get_spot_ativo_bs
             v = float(get_spot_ativo_bs(tkr))
             if v > 0: return round(v, 2)
-        except Exception: pass
+        except: pass
 
         try:
             from services.api import spot_ativo_bs
             v = float(spot_ativo_bs(tkr))
             if v > 0: return round(v, 2)
-        except Exception: pass
+        except: pass
 
         try:
             from services.api import black_scholes_spot
             v = float(black_scholes_spot(tkr))
             if v > 0: return round(v, 2)
-        except Exception: pass
+        except: pass
 
         return _spot_consenso(payload_opcoes)
 
@@ -129,15 +133,20 @@ def atualizar_e_screener_atm_2venc(
             v2 = _third_friday(date(y2, m2, 1))
         return v1, v2
 
+    # -------------------------
+    # DATAS DOS VENCIMENTOS
+    # -------------------------
     hoje = date.today()
     v1, v2 = _next_two_third_fridays(hoje)
     ds = [v1.strftime("%Y-%m-%d"), v2.strftime("%Y-%m-%d")]
+
     print(f"[{exec_id}] DATES_ALIGNED {ds}", flush=True)
 
-    # === CACHE DO RESULTADO DO SCREENER ===
+    # ===============================================================
+    #  >>>>>>>>>>>>>> CACHE FINAL EFETIVO DO SCREENER <<<<<<<<<<<<<<
+    # ===============================================================
     global _screener_cache
 
-    # AQUI É A CHAVE NOVA INCLUINDO HORIZONTE + CRUSH
     cache_key = (
         ticker.upper().strip(),
         ds[0],
@@ -154,16 +163,20 @@ def atualizar_e_screener_atm_2venc(
             age_sec = now_ts - cached["ts"]
             if age_sec <= result_ttl_min * 60:
                 print(
-                    f"[{exec_id}] CACHE_HIT_SCREENER key={cache_key} age={age_sec:.1f}s (no DB)",
+                    f"[{exec_id}] CACHE_HIT_SCREENER key={cache_key} age={age_sec:.1f}s",
                     flush=True,
                 )
                 print(
-                    f"[{exec_id}] END atualizar_e_screener_atm_2venc total={time.perf_counter()-t0:.3f}s (from cache)",
+                    f"[{exec_id}] END atualizar_e_screener_atm_2venc total={time.perf_counter()-t0:.3f}s "
+                    f"(from FINAL CACHE)",
                     flush=True,
                 )
                 return cached["data"]
 
-    # ====== ROTINA ORIGINAL (DB, locks, atualização etc) ======
+    # ===============================================================
+    # >>>>>>>>>> ROTINA ORIGINAL (APENAS SE O CACHE FALHAR) <<<<<<<<<
+    # ===============================================================
+
     t_need = time.perf_counter()
     need_v1 = True if refresh else precisa_refresh_por_data(ticker, ds[0], max_age_minutes=ttl_min)
     need_v2 = True if refresh else precisa_refresh_por_data(ticker, ds[1], max_age_minutes=ttl_min)
@@ -173,103 +186,33 @@ def atualizar_e_screener_atm_2venc(
     )
 
     if need_v1 or need_v2:
-        t_lock = time.perf_counter()
         _conn_lock = conectar()
-        print(f"[{exec_id}] LOCK_CONNECT ok={bool(_conn_lock)} dt={time.perf_counter()-t_lock:.3f}s", flush=True)
+        print(f"[{exec_id}] LOCK_CONNECT ok={bool(_conn_lock)}", flush=True)
+
         if _conn_lock:
             try:
-                t_try = time.perf_counter()
                 got = tentar_lock_ticker(_conn_lock, ticker)
-                print(f"[{exec_id}] TRY_LOCK got={got} dt={time.perf_counter()-t_try:.3f}s", flush=True)
+                print(f"[{exec_id}] TRY_LOCK got={got}", flush=True)
+
                 if got:
-                    try:
-                        updated_any = False
-                        if need_v1:
-                            t_u1 = time.perf_counter()
-                            inserir_opcoes_do_ativo(ticker, so_vencimento=ds[0])
-                            updated_any = True
-                            print(f"[{exec_id}] UPDATE_V1 done dt={time.perf_counter()-t_u1:.3f}s",
-                                  flush=True)
-                        if need_v2:
-                            t_u2 = time.perf_counter()
-                            inserir_opcoes_do_ativo(ticker, so_vencimento=ds[1])
-                            updated_any = True
-                            print(f"[{exec_id}] UPDATE_V2 done dt={time.perf_counter()-t_u2:.3f}s",
-                                  flush=True)
+                    updated_any = False
 
-                        if updated_any:
-                            t_payload = time.perf_counter()
-                            payload = buscar_opcoes_ativo(ticker.upper().strip())
-                            spot_new = _spot_preferir_bs(ticker.upper().strip(), payload)
-                            print(
-                                f"[{exec_id}] PAYLOAD+SPOT spot_new={spot_new} dt={time.perf_counter()-t_payload:.3f}s",
-                                flush=True,
-                            )
+                    if need_v1:
+                        inserir_opcoes_do_ativo(ticker, so_vencimento=ds[0])
+                        updated_any = True
+                        print(f"[{exec_id}] UPDATE_V1 done", flush=True)
 
-                            if spot_new is not None:
-                                t_upd = time.perf_counter()
-                                with _conn_lock.cursor() as cur:
-                                    cur.execute(
-                                        """
-                                        UPDATE public.opcoes_do_ativo
-                                           SET spot_price = %s,
-                                               data_ultima_consulta = NOW()
-                                         WHERE parent_symbol = %s
-                                        """,
-                                        (spot_new, ticker),
-                                    )
-                                _conn_lock.commit()
-                                print(
-                                    f"[{exec_id}] UPDATE_SPOT commit dt={time.perf_counter()-t_upd:.3f}s",
-                                    flush=True,
-                                )
-                    finally:
-                        liberar_lock_ticker(_conn_lock, ticker)
-                        print(f"[{exec_id}] UNLOCK", flush=True)
-            finally:
-                try:
-                    _conn_lock.close()
-                except Exception:
-                    pass
+                    if need_v2:
+                        inserir_opcoes_do_ativo(ticker, so_vencimento=ds[1])
+                        updated_any = True
+                        print(f"[{exec_id}] UPDATE_V2 done", flush=True)
 
-    t_sc1 = time.perf_counter()
-    print(f"[{exec_id}] BEFORE_SCREENER_DB_READ", flush=True)
-    res = screener_atm_dois_vencimentos(ticker, hoje)
-    print(
-        f"[{exec_id}] AFTER_SCREENER_DB_READ dt={time.perf_counter()-t_sc1:.3f}s "
-        f"atm_len={len((res or {}).get('atm', []))}",
-        flush=True,
-    )
-
-    # fallback se vier vazio (mantido igual)
-    if not (res or {}).get("atm"):
-        print(f"[{exec_id}] EMPTY_ATM -> GLOBAL_REFRESH", flush=True)
-        t_lock2 = time.perf_counter()
-        _conn_lock = conectar()
-        print(f"[{exec_id}] LOCK_CONNECT2 ok={bool(_conn_lock)} dt={time.perf_counter()-t_lock2:.3f}s", flush=True)
-        if _conn_lock:
-            try:
-                t_try2 = time.perf_counter()
-                got2 = tentar_lock_ticker(_conn_lock, ticker)
-                print(f"[{exec_id}] TRY_LOCK2 got={got2} dt={time.perf_counter()-t_try2:.3f}s",
-                      flush=True)
-                if got2:
-                    try:
-                        t_u_all = time.perf_counter()
-                        inserir_opcoes_do_ativo(ticker)
-                        print(f"[{exec_id}] UPDATE_ALL done dt={time.perf_counter()-t_u_all:.3f}s",
-                              flush=True)
-
-                        t_payload2 = time.perf_counter()
+                    if updated_any:
                         payload = buscar_opcoes_ativo(ticker.upper().strip())
                         spot_new = _spot_preferir_bs(ticker.upper().strip(), payload)
-                        print(
-                            f"[{exec_id}] PAYLOAD2+SPOT spot_new={spot_new} dt={time.perf_counter()-t_payload2:.3f}s",
-                            flush=True,
-                        )
+                        print(f"[{exec_id}] PAYLOAD+SPOT spot_new={spot_new}", flush=True)
 
                         if spot_new is not None:
-                            t_upd2 = time.perf_counter()
                             with _conn_lock.cursor() as cur:
                                 cur.execute(
                                     """
@@ -281,30 +224,55 @@ def atualizar_e_screener_atm_2venc(
                                     (spot_new, ticker),
                                 )
                             _conn_lock.commit()
-                            print(
-                                f"[{exec_id}] UPDATE_SPOT2 commit dt={time.perf_counter()-t_upd2:.3f}s",
-                                flush=True,
-                            )
-                    finally:
-                        liberar_lock_ticker(_conn_lock, ticker)
-                        print(f"[{exec_id}] UNLOCK2", flush=True)
+                            print(f"[{exec_id}] UPDATE_SPOT commit", flush=True)
+
             finally:
                 try:
+                    liberar_lock_ticker(_conn_lock, ticker)
                     _conn_lock.close()
-                except Exception:
+                except:
                     pass
 
-        t_sc2 = time.perf_counter()
-        print(f"[{exec_id}] BEFORE_SCREENER_DB_READ_AGAIN", flush=True)
-        res = screener_atm_dois_vencimentos(ticker, hoje)
-        print(
-            f"[{exec_id}] AFTER_SCREENER_DB_READ_AGAIN dt={time.perf_counter()-t_sc2:.3f}s "
-            f"atm_len={len((res or {}).get('atm', []))}",
-            flush=True,
-        )
+    print(f"[{exec_id}] BEFORE_SCREENER_DB_READ", flush=True)
+    res = screener_atm_dois_vencimentos(ticker, hoje)
+    print(f"[{exec_id}] AFTER_SCREENER_DB_READ", flush=True)
 
-    # === ARMAZENA NO CACHE (AGORA USANDO chave nova) ===
-    if res and (res.get("atm")) and result_ttl_min > 0:
+    if not (res or {}).get("atm"):
+        print(f"[{exec_id}] EMPTY_ATM -> GLOBAL_REFRESH", flush=True)
+        _conn_lock = conectar()
+        if _conn_lock:
+            try:
+                got = tentar_lock_ticker(_conn_lock, ticker)
+                if got:
+                    inserir_opcoes_do_ativo(ticker)
+                    payload = buscar_opcoes_ativo(ticker.upper().strip())
+                    spot_new = _spot_preferir_bs(ticker.upper().strip(), payload)
+
+                    if spot_new:
+                        with _conn_lock.cursor() as cur:
+                            cur.execute(
+                                """
+                                UPDATE public.opcoes_do_ativo
+                                   SET spot_price = %s,
+                                       data_ultima_consulta = NOW()
+                                 WHERE parent_symbol = %s
+                                """,
+                                (spot_new, ticker),
+                            )
+                        _conn_lock.commit()
+            finally:
+                try:
+                    liberar_lock_ticker(_conn_lock, ticker)
+                    _conn_lock.close()
+                except:
+                    pass
+
+        res = screener_atm_dois_vencimentos(ticker, hoje)
+
+    # ===============================================================
+    #        >>>>>>> SALVAR NO CACHE FINAL <<<<<<<<
+    # ===============================================================
+    if res and res.get("atm") and result_ttl_min > 0:
         _screener_cache[cache_key] = {"ts": now_ts, "data": res}
         print(f"[{exec_id}] CACHE_STORE_SCREENER key={cache_key}", flush=True)
 

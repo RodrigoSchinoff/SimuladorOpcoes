@@ -1,14 +1,30 @@
-# macOS
+# ---------------------------------------------------------
+# Sistema operacional
+# ---------------------------------------------------------
 .DS_Store
-core/.DS_Store
-repositories/.DS_Store
+Thumbs.db
 
-# Python cache
+# ---------------------------------------------------------
+# Python / Django
+# ---------------------------------------------------------
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Django local
 db.sqlite3
 
-# Segredos
+# Virtualenv
+.venv/
+venv/
+
+# PyCharm
+.idea/
+
+# ---------------------------------------------------------
+# Ambiente / Segredos (CRÍTICO)
+# ---------------------------------------------------------
 .env
+.env.*
+*.env
+*.env.*
