@@ -77,6 +77,27 @@ _ls_cache = {}
 
 async def long_straddle(request):
 
+    # 🔒 EVITAR EXECUÇÃO AUTOMÁTICA (HEAD / GET VAZIO)
+    if request.method == "HEAD":
+        return render(request, "simulador_web/long_straddle.html", {})
+
+    if not request.GET:
+        contexto = {
+            "resultado": None,
+            "erro": None,
+            "ativo": "",
+            "spot_oficial": None,
+            "linhas_screener": None,
+            "lote_total": DEFAULT_TOTAL_LOT,
+            "horizonte": "Vencimento",
+            "crush_iv": 10,
+            "num_vencimentos": "1",
+            "be_max_pct": None,
+            "aviso_horizonte": None,
+        }
+        return render(request, "simulador_web/long_straddle.html", contexto)
+
+
     # ---------------------------------------------------------
     # PARÂMETROS DO FORM + CHAVE DE CACHE
     # ---------------------------------------------------------
