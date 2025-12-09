@@ -1,5 +1,8 @@
 # simulador_web/views.py
 from django.shortcuts import render
+from core.cache_keys import ls_cache_key
+from core.lock import acquire_lock, release_lock
+
 
 from simulacoes.long_straddle import simular_long_straddle
 from simulacoes.black_scholes import black_scholes, implied_vol
@@ -88,14 +91,7 @@ async def long_straddle(request):
     crush_iv = _to_float(crush_iv_raw, 10.0)
     be_max_pct = float(be_max_pct_raw) if be_max_pct_raw else None
 
-    cache_key = (
-        ativo,
-        lote_total,
-        horizonte,
-        crush_iv,
-        num_vencimentos,
-        be_max_pct,
-    )
+    cache_key = ls_cache_key(ativo, horizonte, num_vencimentos)
 
     import time
     now_ts = time.time()
@@ -103,9 +99,16 @@ async def long_straddle(request):
 
     global _ls_cache
     cached = _ls_cache.get(cache_key)
-    if cached:
-        if now_ts - cached["ts"] <= ttl_ls:
+    if cached and now_ts - cached["ts"] <= ttl_ls:
+        return render(request, "simulador_web/long_straddle.html", cached["data"])
+
+    # Anti-stampede: aguardar lock se cache frio
+    if not acquire_lock(cache_key):
+        # não conseguiu lock → tentar ler cache novamente (outro thread pode ter gerado)
+        cached = _ls_cache.get(cache_key)
+        if cached:
             return render(request, "simulador_web/long_straddle.html", cached["data"])
+        raise Exception("Sistema ocupado, tente novamente em instantes.")
 
     # ---------------------------------------------------------
     # SEM PARÂMETROS → tela vazia
@@ -405,6 +408,9 @@ async def long_straddle(request):
             "be_max_pct": be_max_pct,
             "aviso_horizonte": None,
         }
+
+    finally:
+        release_lock(cache_key)
 
     # ---------------------------------------------------------
     # SALVAR RESULTADO FINAL NO CACHE

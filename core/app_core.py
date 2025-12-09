@@ -4,6 +4,9 @@ ttl_min = int(os.getenv("TTL_MIN", "2"))
 
 from etl.carregar_opcoes_db import inserir_opcoes_do_ativo
 from simulacoes.ls_screener import screener_ls_por_ticker_vencimento
+from core.cache_keys import screener_cache_key
+from core.lock import acquire_lock, release_lock
+
 
 
 def atualizar_e_screener_ls(ticker: str, due_date: str) -> dict:
@@ -147,31 +150,29 @@ def atualizar_e_screener_atm_2venc(
     # ===============================================================
     global _screener_cache
 
-    cache_key = (
+    cache_key = screener_cache_key(
         ticker.upper().strip(),
         ds[0],
         ds[1],
         horizonte,
-        float(crush_iv)
+        crush_iv
     )
 
     now_ts = time.time()
 
     if not refresh and result_ttl_min > 0:
         cached = _screener_cache.get(cache_key)
-        if cached:
-            age_sec = now_ts - cached["ts"]
-            if age_sec <= result_ttl_min * 60:
-                print(
-                    f"[{exec_id}] CACHE_HIT_SCREENER key={cache_key} age={age_sec:.1f}s",
-                    flush=True,
-                )
-                print(
-                    f"[{exec_id}] END atualizar_e_screener_atm_2venc total={time.perf_counter()-t0:.3f}s "
-                    f"(from FINAL CACHE)",
-                    flush=True,
-                )
+        if cached and (now_ts - cached["ts"]) <= result_ttl_min * 60:
+            return cached["data"]
+
+        # Cache frio → aplicar lock
+        need_lock = acquire_lock(cache_key)
+        if not need_lock:
+            # Se não obteve lock, espera resultado do outro processo
+            cached = _screener_cache.get(cache_key)
+            if cached:
                 return cached["data"]
+            raise Exception("Screener ocupado, tente novamente.")
 
     # ===============================================================
     # >>>>>>>>>> ROTINA ORIGINAL (APENAS SE O CACHE FALHAR) <<<<<<<<<
@@ -268,6 +269,8 @@ def atualizar_e_screener_atm_2venc(
                     pass
 
         res = screener_atm_dois_vencimentos(ticker, hoje)
+
+    release_lock(cache_key)
 
     # ===============================================================
     #        >>>>>>> SALVAR NO CACHE FINAL <<<<<<<<
