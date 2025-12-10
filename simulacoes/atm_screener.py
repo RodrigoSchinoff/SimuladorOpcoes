@@ -36,8 +36,10 @@ def _next_two_official_dues(today: date, ops: List[dict]) -> List[str]:
     for _ in range(12):
         due = _third_friday(d).strftime("%Y-%m-%d")
 
-        has_call = any(o for o in ops if o["due_date"][:10] == due and (o.get("category") or "").upper().startswith("CALL"))
-        has_put  = any(o for o in ops if o["due_date"][:10] == due and (o.get("category") or "").upper().startswith("PUT"))
+        has_call = any(o for o in ops if o["due_date"][:10] == due
+                       and (o.get("category") or "").upper().startswith("CALL"))
+        has_put = any(o for o in ops if o["due_date"][:10] == due
+                      and (o.get("category") or "").upper().startswith("PUT"))
 
         if has_call and has_put:
             valid.append(due)
@@ -107,7 +109,8 @@ def _two_atm_strikes(ks, spot):
 # ------------------------------------------------------------
 # Cálculo BS local + fallback API
 # ------------------------------------------------------------
-def _norm_cdf(x): return 0.5 * (1 + erf(x / sqrt(2)))
+def _norm_cdf(x):
+    return 0.5 * (1 + erf(x / sqrt(2)))
 
 
 def _bs_delta_local(spot, strike, dias, vol, r, call_flag):
@@ -136,8 +139,10 @@ def _iv(o):
 def _pairs_for_due(scid, ticker, due_date, ops, spot):
     t0 = time.perf_counter()
 
-    calls = [o for o in ops if o["due_date"].startswith(due_date) and (o.get("category") or "").upper().startswith("CALL")]
-    puts  = [o for o in ops if o["due_date"].startswith(due_date) and (o.get("category") or "").upper().startswith("PUT")]
+    calls = [o for o in ops if o["due_date"].startswith(due_date)
+             and (o.get("category") or "").upper().startswith("CALL")]
+    puts  = [o for o in ops if o["due_date"].startswith(due_date)
+             and (o.get("category") or "").upper().startswith("PUT")]
 
     strikes_call = {round(_f(o.get("strike")), 6) for o in calls}
     strikes_put  = {round(_f(o.get("strike")), 6) for o in puts}
@@ -155,9 +160,9 @@ def _pairs_for_due(scid, ticker, due_date, ops, spot):
         if not c or not p:
             continue
 
-        prem_c = _prem(c)
-        prem_p = _prem(p)
-        prem = prem_c + prem_p
+        prem_c = float(_prem(c) or 0.0)
+        prem_p = float(_prem(p) or 0.0)
+        prem_total = prem_c + prem_p
 
         dias = int(c.get("days_to_maturity") or p.get("days_to_maturity") or 0)
         iv_c = _iv(c)
@@ -166,14 +171,12 @@ def _pairs_for_due(scid, ticker, due_date, ops, spot):
         amount = int((c.get("contract_size") or 100) or 100)
         spot_r = round(spot, 2)
 
-        # LOG para ver se local ou API
+        # DELTAS
         def _delta_leg(o, is_call, vol, premio):
-            # local first
             d_local = _bs_delta_local(spot_r, float(o["strike"]), dias, vol, r, is_call)
             if d_local is not None:
                 return d_local, "LOCAL"
 
-            # API fallback
             params = dict(
                 symbol=o["symbol"], kind="CALL" if is_call else "PUT",
                 spotprice=spot_r, strike=float(o["strike"]),
@@ -193,15 +196,35 @@ def _pairs_for_due(scid, ticker, due_date, ops, spot):
             d_call, src_c = f1.result()
             d_put,  src_p = f2.result()
 
+        # -------------------------------------
+        # RESTAURAÇÃO DOS BREAK-EVENS
+        # -------------------------------------
+        be_down = round(k - prem_total, 2)
+        be_up   = round(k + prem_total, 2)
+
+        be_pct_down = round(((be_down / spot_r) - 1.0) * 100.0, 2) if spot_r > 0 else None
+        be_pct_up   = round(((be_up   / spot_r) - 1.0) * 100.0, 2) if spot_r > 0 else None
+
         out.append({
             "bucket": "ATM",
             "call": c["symbol"],
             "put": p["symbol"],
             "due_date": due_date,
             "strike": float(k),
-            "spot": spot,
-            "premium_total": round(prem, 4),
+            "spot": spot_r,
+
+            # RESTAURADO
+            "premium_total": round(prem_total, 4),
+            "call_premio": round(prem_c, 4),
+            "put_premio":  round(prem_p, 4),
+
+            "be_down": be_down,
+            "be_up": be_up,
+            "be_pct_down": be_pct_down,
+            "be_pct_up": be_pct_up,
+
             "contract_size": amount,
+
             "call_delta": None if d_call is None else round(d_call, 4),
             "put_delta":  None if d_put  is None else round(d_put, 4),
             "src_call": src_c,
