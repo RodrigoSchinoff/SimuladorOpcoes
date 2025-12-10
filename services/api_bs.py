@@ -1,27 +1,38 @@
-# services/oplab_bs.py
+# services/api_bs.py
 import os
 import requests
 
 BASE_URL = "https://api.oplab.com.br/v3/market/options/bs"
 
+
 def _get_headers():
-    # Prioriza token do .env; se não houver, usa o HEADERS já usado pela sua services/api.py
-    tok = os.getenv("OPLAB_TOKEN") or os.getenv("OPLAB_ACCESS_TOKEN")
+    """
+    Usa sempre o token da Oplab vindo do .env (OPLAB_TOKEN).
+    """
+    tok = os.getenv("OPLAB_TOKEN")
     if tok:
         return {"Access-Token": tok}
-    try:
-        from services.api import HEADERS
-        if "Access-Token" in HEADERS:
-            return HEADERS
-    except Exception:
-        pass
-    raise RuntimeError("Defina OPLAB_TOKEN (ou configure services.api.HEADERS).")
+    raise RuntimeError("Defina OPLAB_TOKEN no .env ou nas variáveis de ambiente.")
+
 
 def bs_greeks(
-    *, symbol: str, kind: str, spotprice: float, strike: float,
-    premium: float, dtm: int, vol: float, due_date: str,
-    irate: float = 0.0, amount: int = 100, timeout: int = 8
+    *,
+    symbol: str,
+    kind: str,
+    spotprice: float,
+    strike: float,
+    premium: float,
+    dtm: int,
+    vol: float,
+    due_date: str,
+    irate: float = 0.0,
+    amount: int = 100,
+    timeout: int = 8,
 ) -> dict:
+    """
+    Chamada direta da API Black-Scholes da Oplab.
+    Todos os parâmetros obrigatórios estão aqui, seguindo a doc oficial.
+    """
     params = {
         "symbol": symbol,
         "irate": irate,

@@ -1,10 +1,15 @@
+# services/api.py
+import os
+import json
 import requests
 
-# Coloque aqui o seu token pessoal da Oplab
-#rodrigos
-#ACCESS_TOKEN = "SL8Wa37FGwhqW9L83BkY4dxkzTqSLF9OTTm1Y+a8XD3oxIdL+2XRGYoBfHxAxrdA--dXFDR6Vcn6A4QocfRWGyPg==--Zjk0ODhmYTNhZDRkMWFjZGMwMTQzYzk0ODE1YWY4Yjc="
-#thomas
-ACCESS_TOKEN = "Bvi09CGIabvKUgmq/XdoxOQqpJH/2G7qxoqhBVZ03KG1B4PRbQATb3bUJHRZXIdB--NNybmlgHhyta4TENaE7kCA==--ZjIzNWZkMWFjZWZiMDdmNjBlNDNkNjhiOTcwYTc1ZjY="
+# --------------------------------------------------
+# Token Oplab via .env (NUNCA hardcoded)
+# --------------------------------------------------
+ACCESS_TOKEN = os.getenv("OPLAB_TOKEN")
+if not ACCESS_TOKEN:
+    raise RuntimeError("Defina OPLAB_TOKEN no .env ou nas variáveis de ambiente.")
+
 HEADERS = {
     "Access-Token": ACCESS_TOKEN
 }
@@ -15,7 +20,7 @@ BASE_URL = "https://api.oplab.com.br/v3/market/options"
 def buscar_opcoes_ativo(ativo_base):
     """
     Retorna uma lista de opções (CALL e PUT) do ativo informado.
-    Agora com timeout e tratamento de erro seguro.
+    Com timeout e tratamento de erro.
     """
     url = f"{BASE_URL}/{ativo_base}"
     try:
@@ -32,7 +37,7 @@ def buscar_opcoes_ativo(ativo_base):
 def buscar_detalhes_opcao(symbol_opcao):
     """
     Retorna os detalhes de uma opção específica pelo símbolo.
-    Agora com timeout e tratamento de erro seguro.
+    Com timeout e tratamento de erro.
     """
     url = f"{BASE_URL}/details/{symbol_opcao}"
     try:
@@ -48,10 +53,10 @@ def buscar_detalhes_opcao(symbol_opcao):
         raise Exception(f"Erro ao buscar detalhes da opção {symbol_opcao}: {e}")
 
 
-import json
-import os
-
 def salvar_json_em_arquivo(dados, nome_arquivo):
+    """
+    Utilitário para debug local: salva qualquer JSON em disco.
+    """
     pasta = "respostas_json"
     os.makedirs(pasta, exist_ok=True)  # Cria pasta se não existir
     caminho = os.path.join(pasta, nome_arquivo)
@@ -62,6 +67,7 @@ def salvar_json_em_arquivo(dados, nome_arquivo):
 
 # --- Spot oficial do ativo (Oplab) ---
 STOCK_URL = "https://api.oplab.com.br/v3/market/stocks/{symbol}?with_financials=false"
+
 
 def get_spot_ativo_oficial(ticker: str) -> float | None:
     """
