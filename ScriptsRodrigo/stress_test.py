@@ -3,8 +3,11 @@ import aiohttp
 import time
 
 URL = "https://simuladorls.onrender.com/"
+#URL = "#https://simuladoropcoes.onrender.com/"
+#URL = "http://simuladoropcoes.onrender.com/?ativo=PETR4"
 
-USERS = 8800         # quantidade de acessos simultâneos
+
+USERS = 8000    # quantidade de acessos simultâneos
 REQUESTS_PER_USER = 3  # quantas vezes cada “usuário” acessa
 
 
