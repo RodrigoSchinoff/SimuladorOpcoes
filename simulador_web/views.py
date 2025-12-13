@@ -13,6 +13,9 @@ from services.api import buscar_detalhes_opcao, get_spot_ativo_oficial
 import os
 
 
+def landing(request):
+    return render(request, "simulador_web/landing.html")
+
 
 LOT_MIN = 100
 DEFAULT_TOTAL_LOT = 10000
