@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Login - StraddlePro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body{
+      font-family:Arial,sans-serif;
+      background:#0b1220;
+      color:#e5e7eb;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      margin:0;
+      padding:20px;
+    }
+
+    .box{
+      width:100%;
+      max-width:420px;          /* ↓ menor */
+      background:#0f172a;
+      border:1px solid rgba(148,163,184,.18);
+      border-radius:16px;
+      padding:20px;             /* ↓ menor */
+      box-shadow:0 8px 32px rgba(0,0,0,.4);
+    }
+
+    h1{
+      font-size:22px;           /* ↓ menor */
+      margin:0 0 18px;
+    }
+
+    label{
+      display:block;
+      margin:14px 0 6px;
+      color:#9ca3af;
+      font-size:14px;           /* ↓ menor */
+    }
+
+    input, button{
+      width:100%;
+      box-sizing:border-box;
+    }
+
+    input{
+      padding:12px 14px;        /* ↓ menor */
+      border-radius:12px;
+      border:1px solid rgba(148,163,184,.18);
+      background:#020617;
+      color:#e5e7eb;
+      font-size:14px;           /* ↓ menor */
+    }
+
+    input:focus{
+      outline:none;
+      border-color:#3b82f6;
+    }
+
+    button{
+      margin-top:20px;
+      padding:14px 14px;        /* ↓ menor */
+      border-radius:14px;
+      border:0;
+      background:#3b82f6;
+      color:#020617;
+      font-weight:800;
+      font-size:16px;           /* ↓ menor */
+      cursor:pointer;
+    }
+
+    .err{
+      margin-top:12px;
+      background:rgba(220,38,38,.12);
+      border:1px solid rgba(220,38,38,.35);
+      padding:10px;
+      border-radius:10px;
+      color:#fecaca;
+      font-size:13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Entrar no StraddlePro</h1>
+
+    {% if form.errors %}
+      <div class="err">Usuário ou senha inválidos.</div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <label>Usuário</label>
+      <input type="text" name="username" autofocus required>
+
+      <label>Senha</label>
+      <input type="password" name="password" required>
+
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit">Entrar</button>
+    </form>
+  </div>
+</body>
+</html>

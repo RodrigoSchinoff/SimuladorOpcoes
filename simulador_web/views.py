@@ -2,14 +2,12 @@
 from django.shortcuts import render
 from core.cache_keys import ls_cache_key
 from core.lock import acquire_lock, release_lock
-
-
 from simulacoes.long_straddle import simular_long_straddle
 from simulacoes.black_scholes import black_scholes, implied_vol
-
 from core.app_core import atualizar_e_screener_atm_2venc
 from services.api import buscar_detalhes_opcao, get_spot_ativo_oficial
 
+from .utils import subscription_required
 import os
 
 
@@ -78,6 +76,7 @@ def home(request):
 # cache local (global no módulo)
 _ls_cache = {}
 
+@subscription_required
 async def long_straddle(request):
 
     # 🔒 EVITAR EXECUÇÃO AUTOMÁTICA (HEAD / GET VAZIO)

@@ -12,6 +12,7 @@
   --text:#e5e7eb;
   --muted:#9ca3af;
   --border:rgba(148,163,184,.18);
+  --danger:#dc2626;
 }
 
 *{
@@ -30,6 +31,19 @@ body{
     radial-gradient(900px 500px at 85% 15%, rgba(30,64,175,.25), transparent),
     var(--bg);
   color:var(--text);
+}
+
+/* ALERT */
+.alert{
+  max-width:1100px;
+  margin:140px auto -80px;
+  padding:18px 24px;
+  border-radius:12px;
+  background:rgba(220,38,38,.12);
+  border:1px solid rgba(220,38,38,.35);
+  color:#fecaca;
+  font-weight:500;
+  text-align:center;
 }
 
 /* HEADER */
@@ -183,8 +197,16 @@ footer{
 
 <header>
   <h1>Straddle<span>Pro</span></h1>
-  <a href="/app/ls/">Acessar Plataforma</a>
+  <a href="/accounts/login/?next=/app/ls/">Login</a>
 </header>
+
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert">
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endif %}
 
 <div class="hero">
   <div class="hero-grid">
@@ -198,7 +220,7 @@ footer{
       </p>
 
       <div class="hero-actions">
-        <a href="/app/ls/" class="btn-primary">Entrar no Simulador</a>
+        <a href="/accounts/login/?next=/app/ls/" class="btn-primary">Entrar no Simulador</a>
         <a href="#" class="btn-secondary">Conhecer a ferramenta</a>
       </div>
     </div>
@@ -254,7 +276,7 @@ footer{
   <div class="grid">
     <div class="card">
       <h4>Menos complexidade</h4>
-      <p>Não é necessário domina teoria avançada de opções para identificar boas oportunidades.</p>
+      <p>Não é necessário dominar teoria avançada de opções para identificar boas oportunidades.</p>
     </div>
     <div class="card">
       <h4>Mais objetividade</h4>
@@ -263,7 +285,7 @@ footer{
     </div>
     <div class="card">
       <h4>Consistência no longo prazo</h4>
-      <p>Use a ferramenta como apoio para construir método, disciplina e previsibilidade ao operar opções..</p>
+      <p>Use a ferramenta como apoio para construir método, disciplina e previsibilidade ao operar opções.</p>
     </div>
   </div>
 </section>
