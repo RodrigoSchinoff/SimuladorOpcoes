@@ -10,10 +10,27 @@
             margin: 16px;
             background: #f5f5f5;
         }
+
+        /* ===== LOGOUT ===== */
+        .logout-box {
+            text-align: right;
+            margin-bottom: 8px;
+        }
+
+        .logout-box button {
+            padding: 4px 10px;
+            font-size: 12px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            background: #f5f5f5;
+            cursor: pointer;
+        }
+
         h1 {
             font-size: 20px;
             margin-bottom: 8px;
         }
+
         .card {
             background: #ffffff;
             border-radius: 10px;
@@ -21,6 +38,7 @@
             margin-bottom: 16px;
             box-shadow: 0 1px 4px rgba(0,0,0,0.06);
         }
+
         .form-row {
             display: flex;
             flex-wrap: wrap;
@@ -28,11 +46,13 @@
             margin-bottom: 4px;
             align-items: flex-end;
         }
+
         .form-row label {
             font-size: 13px;
             display: block;
             margin-bottom: 2px;
         }
+
         .form-row input,
         .form-row select {
             padding: 4px 6px;
@@ -41,6 +61,7 @@
             border: 1px solid #ccc;
             min-width: 90px;
         }
+
         .btn {
             padding: 6px 14px;
             font-size: 13px;
@@ -50,34 +71,42 @@
             color: #fff;
             cursor: pointer;
         }
+
         .btn:hover {
             background: #1d4ed8;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
             font-size: 12px;
         }
+
         th, td {
             padding: 4px 6px;
             border-bottom: 1px solid #e5e7eb;
             white-space: nowrap;
         }
+
         th {
             background: #f3f4f6;
             text-align: right;
         }
+
         th:first-child, td:first-child {
             text-align: left;
         }
+
         .text-right {
             text-align: right;
         }
+
         .erro {
             color: #b91c1c;
             font-size: 13px;
             margin-bottom: 8px;
         }
+
         .aviso {
             color: #92400e;
             font-size: 12px;
@@ -87,6 +116,14 @@
 </head>
 <body>
 
+<!-- ===== LOGOUT ===== -->
+<div class="logout-box">
+    <form method="post" action="/accounts/logout/">
+        {% csrf_token %}
+        <button type="submit">Sair</button>
+    </form>
+</div>
+
 <div class="card">
     <h1>Long Straddle – Screener ATM</h1>
 
@@ -94,91 +131,65 @@
         <div class="erro">{{ erro }}</div>
     {% endif %}
 
-   <form method="get">
+    <!-- ===== FORM DO SCREENER ===== -->
+    <form method="get" id="screener_form">
+
         <div id="status_msg" class="aviso"></div>
 
         <div class="form-row">
 
-            <!-- ATIVO -->
             <div style="display:flex; flex-direction:column; min-width:180px;">
-                <label for="id_ativo">Ativo</label>
-                <input type="text"
-                       id="id_ativo"
-                       name="ativo"
-                       value="{{ ativo }}"
-                       placeholder="Ex.: PETR4 (vazio = vários)">
+                <label>Ativo</label>
+                <input type="text" name="ativo" value="{{ ativo }}" placeholder="Ex.: PETR4 (vazio = vários)">
             </div>
 
-            <!-- LOTE TOTAL -->
             <div>
-                <label for="id_lote_total">Lote Total</label>
-                <input type="number" id="id_lote_total" name="lote_total" value="{{ lote_total }}">
+                <label>Lote Total</label>
+                <input type="number" name="lote_total" value="{{ lote_total }}">
             </div>
 
-            <!-- HORIZONTE -->
             <div>
-                <label for="id_horizonte">Horizonte</label>
-                <select id="id_horizonte" name="horizonte">
+                <label>Horizonte</label>
+                <select name="horizonte" id="id_horizonte">
                     <option value="Vencimento" {% if horizonte == "Vencimento" %}selected{% endif %}>Vencimento</option>
                     <option value="D+1" {% if horizonte == "D+1" %}selected{% endif %}>D+1</option>
                 </select>
             </div>
 
-            <!-- CRUSH IV -->
             <div>
-                <label for="id_crush_iv">Crush IV (%)</label>
+                <label>Crush IV (%)</label>
                 <input type="number" step="0.1" id="id_crush_iv" name="crush_iv" value="{{ crush_iv }}">
             </div>
 
-            <!-- Nº VENCIMENTOS -->
             <div>
-                <label for="id_num_venc">Nº Vencimentos</label>
-                <select id="id_num_venc" name="num_vencimentos">
-                    <option value="1" {% if num_vencimentos == "1" %}selected{% endif %}>Apenas Atual</option>
+                <label>Nº Vencimentos</label>
+                <select name="num_vencimentos">
+                    <option value="1" {% if num_vencimentos == "1" %}selected{% endif %}>Atual</option>
                     <option value="2" {% if num_vencimentos == "2" %}selected{% endif %}>Atual + Próximo</option>
                 </select>
             </div>
 
-            <!-- BE MAX (%) -->
             <div>
-                <label for="id_be_max">BE Max (%)</label>
-                <input type="number" step="0.01" id="id_be_max" name="be_max_pct"
-                       value="{% if be_max_pct is not None %}{{ be_max_pct }}{% endif %}"
-                       placeholder="Opcional (ex.: 5)">
+                <label>BE Max (%)</label>
+                <input type="number" step="0.01" name="be_max_pct"
+                       value="{% if be_max_pct is not None %}{{ be_max_pct }}{% endif %}">
             </div>
 
-            <!-- BOTÃO -->
             <div>
                 <button class="btn" type="submit" id="btn_rodar">Rodar Screener</button>
             </div>
 
         </div>
-
-        <!-- OBS DO ATIVO (fora da linha, não atrapalha alinhamento) -->
-        <div style="font-size: 11px; color:#6b7280; margin-top:2px; margin-bottom:4px;">
-            Deixe vazio para analisar vários ativos.
-        </div>
-
-        {% if spot_oficial %}
-            <div style="font-size: 12px; margin-top: 4px;">
-                Spot oficial: <strong>{{ spot_oficial|floatformat:2 }}</strong>
-            </div>
-        {% endif %}
-
-        {% if aviso_horizonte %}
-            <div class="aviso">{{ aviso_horizonte }}</div>
-        {% endif %}
     </form>
 </div>
-
 
 {% if linhas_screener %}
 <div class="card" id="resultado_card">
     <table>
         <thead>
         <tr>
-            <th style="text-align:center;">CALL</th>
-            <th style="text-align:center;">PUT</th>
+            <th>CALL</th>
+            <th>PUT</th>
             <th>Strike</th>
             <th>%BE↓</th>
             <th>BE↓</th>
@@ -186,14 +197,9 @@
             <th>BE↑</th>
             <th>Spot</th>
             <th>Prêmio Total</th>
-            <th>Prêmio CALL</th>
-            <th>Δ CALL</th>
-            <th>Prêmio PUT</th>
-            <th>Δ PUT</th>
-            <th>Vencimento</th>
             <th>Lote CALL</th>
             <th>Lote PUT</th>
-            <th>Custo Operação</th>
+            <th>Custo</th>
         </tr>
         </thead>
         <tbody>
@@ -202,22 +208,15 @@
                 <td>{{ r.call }}</td>
                 <td>{{ r.put }}</td>
                 <td class="text-right">{{ r.strike|floatformat:2 }}</td>
-                <td class="text-right">{% if r.be_pct_down is not None %}{{ r.be_pct_down|floatformat:2 }}%{% endif %}</td>
+                <td class="text-right">{{ r.be_pct_down|floatformat:2 }}</td>
                 <td class="text-right">{{ r.be_down|floatformat:2 }}</td>
-                <td class="text-right">{% if r.be_pct_up is not None %}{{ r.be_pct_up|floatformat:2 }}%{% endif %}</td>
+                <td class="text-right">{{ r.be_pct_up|floatformat:2 }}</td>
                 <td class="text-right">{{ r.be_up|floatformat:2 }}</td>
-                <td class="text-right">{{ spot_oficial|default_if_none:r.spot|floatformat:2 }}</td>
-                <td class="text-right">R$ {{ r.premium_total|floatformat:4 }}</td>
-                <td class="text-right">R$ {{ r.call_premio|floatformat:4 }}</td>
-                <td class="text-right">{% if r.call_delta is not None %}{{ r.call_delta|floatformat:4 }}{% endif %}</td>
-                <td class="text-right">R$ {{ r.put_premio|floatformat:4 }}</td>
-                <td class="text-right">{% if r.put_delta is not None %}{{ r.put_delta|floatformat:4 }}{% endif %}</td>
-                <!-- Vencimento: vamos formatar no JS para dd-mm-aaaa -->
-                <td class="col-venc">{{ r.due_date }}</td>
-                <!-- Custo operação: JS vai colocar ponto no milhar -->
+                <td class="text-right">{{ r.spot|floatformat:2 }}</td>
+                <td class="text-right">{{ r.premium_total|floatformat:2 }}</td>
                 <td class="text-right">{{ r.qty_call }}</td>
                 <td class="text-right">{{ r.qty_put }}</td>
-                <td class="text-right col-custo">R$ {{ r.custo_operacao|floatformat:2 }}</td>
+                <td class="text-right">R$ {{ r.custo_operacao|floatformat:2 }}</td>
             </tr>
         {% endfor %}
         </tbody>
@@ -225,60 +224,28 @@
 </div>
 {% endif %}
 
-
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
-    const form = document.querySelector("form");
+    const form = document.getElementById("screener_form");
     const btn = document.getElementById("btn_rodar");
     const status = document.getElementById("status_msg");
     const horiz = document.getElementById("id_horizonte");
     const crush = document.getElementById("id_crush_iv");
 
-    function syncCrushField() {
-        if (horiz.value === "D+1") {
-            crush.disabled = false;
-            if (!crush.value) crush.value = "10";
-        } else {
-            crush.disabled = true;
-        }
+    function syncCrush() {
+        crush.disabled = horiz.value !== "D+1";
+        if (!crush.disabled && !crush.value) crush.value = "10";
     }
 
-    syncCrushField();
-    horiz.addEventListener("change", syncCrushField);
+    syncCrush();
+    horiz.addEventListener("change", syncCrush);
 
     form.addEventListener("submit", function () {
-        if (status) status.textContent = "Processando screener...";
+        status.textContent = "Processando screener...";
         btn.disabled = true;
         btn.textContent = "Processando...";
-
-        const card = document.getElementById("resultado_card");
-        if (card) card.style.opacity = "0.3";
     });
-
-    // ---- FORMATAÇÃO VENCIMENTO: AAAA-MM-DD -> DD-MM-AAAA ----
-    const vencTds = document.querySelectorAll("td.col-venc");
-    vencTds.forEach(function(td) {
-        const v = td.textContent.trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
-            const parts = v.split("-");
-            td.textContent = parts[2] + "-" + parts[1] + "-" + parts[0];
-        }
-    });
-
-    // ---- FORMATAÇÃO CUSTO OPERAÇÃO: milhar com ponto, decimal com vírgula ----
-    const custoTds = document.querySelectorAll("td.col-custo");
-    custoTds.forEach(function(td) {
-        let txt = td.textContent.trim(); // ex: "R$ 13929,69" ou "R$ 13929.69"
-        txt = txt.replace(/\s+/g, "");   // "R$13929,69"
-        const m = txt.match(/^R\$(\d+)[.,](\d{2})$/);
-        if (!m) return;
-        let intPart = m[1];
-        const decPart = m[2];
-        intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-        td.textContent = "R$ " + intPart + "," + decPart;
-    });
-
 });
 </script>
 

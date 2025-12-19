@@ -45,3 +45,25 @@ class Subscription(models.Model):
 
     def is_active(self):
         return self.status == "active" and self.end_date >= timezone.now().date()
+
+
+class PlanAssetList(models.Model):
+    PLAN_CHOICES = (
+        ("trial", "Trial"),
+        ("pro", "Pro"),
+    )
+
+    plan = models.CharField(
+        max_length=20,
+        choices=PLAN_CHOICES,
+        unique=True,
+    )
+
+    assets = models.JSONField()
+
+    class Meta:
+        verbose_name = "Ativos do plano"
+        verbose_name_plural = "Ativos do plano"
+
+    def __str__(self):
+        return f"Ativos do plano {self.plan}"

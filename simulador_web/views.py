@@ -6,6 +6,13 @@ from simulacoes.long_straddle import simular_long_straddle
 from simulacoes.black_scholes import black_scholes, implied_vol
 from core.app_core import atualizar_e_screener_atm_2venc
 from services.api import buscar_detalhes_opcao, get_spot_ativo_oficial
+from simulador_web.models import PlanAssetList
+from asgiref.sync import sync_to_async
+from django.contrib.auth import logout
+from django.shortcuts import redirect
+
+import asyncio
+
 
 from .utils import subscription_required
 import os
@@ -76,6 +83,18 @@ def home(request):
 # cache local (global no módulo)
 _ls_cache = {}
 
+async def acquire_lock_async(key):
+    return await asyncio.to_thread(acquire_lock, key)
+
+async def release_lock_async(key):
+    await asyncio.to_thread(release_lock, key)
+
+@sync_to_async
+def get_tickers_for_user(user):
+    plan = user.subscription.plan
+    pal = PlanAssetList.objects.get(plan=plan)
+    return list(pal.assets)
+
 @subscription_required
 async def long_straddle(request):
 
@@ -114,7 +133,8 @@ async def long_straddle(request):
     crush_iv = _to_float(crush_iv_raw, 10.0)
     be_max_pct = float(be_max_pct_raw) if be_max_pct_raw else None
 
-    cache_key = ls_cache_key(ativo, horizonte, num_vencimentos)
+    user_plan = request.user.subscription.plan
+    cache_key = ls_cache_key(ativo, horizonte, num_vencimentos, user_plan)
 
     import time
     now_ts = time.time()
@@ -126,7 +146,7 @@ async def long_straddle(request):
         return render(request, "simulador_web/long_straddle.html", cached["data"])
 
     # Anti-stampede: aguardar lock se cache frio
-    if not acquire_lock(cache_key):
+    if not await acquire_lock_async(cache_key):
         # não conseguiu lock → tentar ler cache novamente (outro thread pode ter gerado)
         cached = _ls_cache.get(cache_key)
         if cached:
@@ -159,8 +179,7 @@ async def long_straddle(request):
         if ativo:
             tickers = [ativo]
         else:
-            tickers = LISTA_ATIVOS_PADRAO[:]
-
+            tickers = await get_tickers_for_user(request.user)
         # ------------------------------------------------------
         # 2) RODAR SCREENER ATM PARA CADA TICKER (ASSÍNCRONO)
         # ------------------------------------------------------
@@ -327,6 +346,9 @@ async def long_straddle(request):
             w_put = abs(_to_float(delta_c)) if delta_c is not None else 1.0
             soma = w_call + w_put
 
+            if soma == 0:
+                continue
+
             raw_call = lote_total * (w_call / soma)
             raw_put = lote_total - raw_call
 
@@ -433,7 +455,7 @@ async def long_straddle(request):
         }
 
     finally:
-        release_lock(cache_key)
+        await release_lock_async(cache_key)
 
     # ---------------------------------------------------------
     # SALVAR RESULTADO FINAL NO CACHE
@@ -444,3 +466,7 @@ async def long_straddle(request):
     }
 
     return render(request, "simulador_web/long_straddle.html", contexto)
+
+def sair(request):
+    logout(request)
+    return redirect("landing")

@@ -1,14 +1,16 @@
 # core/cache_keys.py
 
-def ls_cache_key(ativo, horizonte, num_vencimentos):
+def ls_cache_key(ativo, horizonte, num_vencimentos, plan):
     """
-    Gera uma chave unificada de cache para o Long Straddle.
-    Ignora parâmetros que não precisam gerar cache novo.
+    Gera uma chave unificada de cache para o Long Straddle,
+    isolada por plano de assinatura.
     """
     ativo = (ativo or "").upper().strip() or "LISTA_PADRAO"
     horizonte = (horizonte or "VENC").upper().strip()
     num_vencimentos = str(num_vencimentos or "1")
-    return f"ls:{ativo}:{horizonte}:{num_vencimentos}"
+    plan = (plan or "anon").lower().strip()
+
+    return f"ls:{plan}:{ativo}:{horizonte}:{num_vencimentos}"
 
 
 def screener_cache_key(ticker, v1, v2, horizonte, crush_iv):

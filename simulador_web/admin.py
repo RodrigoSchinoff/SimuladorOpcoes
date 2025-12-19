@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from .models import Subscription, Role
+from .models import PlanAssetList
 
 User = get_user_model()
 
@@ -35,3 +36,4 @@ class CustomUserAdmin(UserAdmin):
 admin.site.unregister(User)
 admin.site.register(User, CustomUserAdmin)
 admin.site.register(Role)
+admin.site.register(PlanAssetList)
