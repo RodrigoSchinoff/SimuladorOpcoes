@@ -21,12 +21,10 @@ def subscription_required(view_func):
             status = await sync_to_async(_check)(request)
 
             if status == "login":
-                # SEM mensagem
                 return redirect("/accounts/login/?next=/app/ls/")
 
             if status == "expired":
-                # sinaliza via querystring (SEM messages)
-                return redirect("/?expired=1")
+                return redirect("/accounts/login/?reason=expired")
 
             return await view_func(request, *args, **kwargs)
         return _wrapped
@@ -40,7 +38,7 @@ def subscription_required(view_func):
                 return redirect("/accounts/login/?next=/app/ls/")
 
             if status == "expired":
-                return redirect("/?expired=1")
+                return redirect("/accounts/login/?reason=expired")
 
             return view_func(request, *args, **kwargs)
         return _wrapped

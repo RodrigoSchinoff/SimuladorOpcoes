@@ -19,16 +19,16 @@
 
     .box{
       width:100%;
-      max-width:420px;          /* ↓ menor */
+      max-width:420px;
       background:#0f172a;
       border:1px solid rgba(148,163,184,.18);
       border-radius:16px;
-      padding:20px;             /* ↓ menor */
+      padding:20px;
       box-shadow:0 8px 32px rgba(0,0,0,.4);
     }
 
     h1{
-      font-size:22px;           /* ↓ menor */
+      font-size:22px;
       margin:0 0 18px;
     }
 
@@ -36,7 +36,7 @@
       display:block;
       margin:14px 0 6px;
       color:#9ca3af;
-      font-size:14px;           /* ↓ menor */
+      font-size:14px;
     }
 
     input, button{
@@ -45,12 +45,12 @@
     }
 
     input{
-      padding:12px 14px;        /* ↓ menor */
+      padding:12px 14px;
       border-radius:12px;
       border:1px solid rgba(148,163,184,.18);
       background:#020617;
       color:#e5e7eb;
-      font-size:14px;           /* ↓ menor */
+      font-size:14px;
     }
 
     input:focus{
@@ -60,13 +60,13 @@
 
     button{
       margin-top:20px;
-      padding:14px 14px;        /* ↓ menor */
+      padding:14px 14px;
       border-radius:14px;
       border:0;
       background:#3b82f6;
       color:#020617;
       font-weight:800;
-      font-size:16px;           /* ↓ menor */
+      font-size:16px;
       cursor:pointer;
     }
 
@@ -84,6 +84,12 @@
 <body>
   <div class="box">
     <h1>Entrar no StraddlePro</h1>
+
+    {% if request.GET.reason == "expired" %}
+      <div class="err">
+        Sua assinatura está expirada ou bloqueada. Regularize para continuar.
+      </div>
+    {% endif %}
 
     {% if form.errors %}
       <div class="err">Usuário ou senha inválidos.</div>

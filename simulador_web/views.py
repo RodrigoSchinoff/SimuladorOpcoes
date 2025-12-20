@@ -10,9 +10,10 @@ from simulador_web.models import PlanAssetList
 from asgiref.sync import sync_to_async
 from django.contrib.auth import logout
 from django.shortcuts import redirect
+from django.contrib import messages
+from django.utils import timezone
 
 import asyncio
-
 
 from .utils import subscription_required
 import os
@@ -95,8 +96,31 @@ def get_tickers_for_user(user):
     pal = PlanAssetList.objects.get(plan=plan)
     return list(pal.assets)
 
+def _redirect_landing_inactive(request):
+    messages.error(request, "Sua assinatura está expirada ou bloqueada. Regularize para continuar.")
+    return redirect("/accounts/login/")
+
 @subscription_required
 async def long_straddle(request):
+
+    # =====================================================
+    # BLOQUEIO DEFINITIVO: expirada / blocked / inválida
+    # (antes de qualquer execução, cache, lock ou API)
+    # =====================================================
+    sub = getattr(request.user, "subscription", None)
+    if not sub:
+        return _redirect_landing_inactive(request)
+
+    if getattr(sub, "status", None) == "blocked":
+        return _redirect_landing_inactive(request)
+
+    end_date = getattr(sub, "end_date", None)
+    if end_date and end_date < timezone.localdate():
+        return _redirect_landing_inactive(request)
+
+    # mantém a regra central de validade
+    if hasattr(sub, "is_active") and not sub.is_active():
+        return _redirect_landing_inactive(request)
 
     # 🔒 EVITAR EXECUÇÃO AUTOMÁTICA (HEAD / GET VAZIO)
     if request.method == "HEAD":

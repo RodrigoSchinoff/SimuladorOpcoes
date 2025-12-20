@@ -11,10 +11,15 @@
             background: #f5f5f5;
         }
 
-        /* ===== LOGOUT ===== */
-        .logout-box {
-            text-align: right;
+        /* ===== TOP BAR ===== */
+        .top-bar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
             margin-bottom: 8px;
+            font-size: 13px;
+            color: #374151;
         }
 
         .logout-box button {
@@ -116,12 +121,16 @@
 </head>
 <body>
 
-<!-- ===== LOGOUT ===== -->
-<div class="logout-box">
-    <form method="post" action="/accounts/logout/">
-        {% csrf_token %}
-        <button type="submit">Sair</button>
-    </form>
+<!-- ===== TOP BAR ===== -->
+<div class="top-bar">
+    <span>Usuário: <strong>{{ request.user }}</strong></span>
+
+    <div class="logout-box">
+        <form method="post" action="/accounts/logout/">
+            {% csrf_token %}
+            <button type="submit">Sair</button>
+        </form>
+    </div>
 </div>
 
 <div class="card">
