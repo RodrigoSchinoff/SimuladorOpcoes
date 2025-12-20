@@ -494,3 +494,7 @@ async def long_straddle(request):
 def sair(request):
     logout(request)
     return redirect("landing")
+
+def planos(request):
+    return render(request, "simulador_web/planos.html")
+

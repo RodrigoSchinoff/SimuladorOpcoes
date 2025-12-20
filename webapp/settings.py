@@ -33,6 +33,9 @@ CSRF_TRUSTED_ORIGINS = [
 # Aplicativos instalados
 # --------------------------------------------------
 INSTALLED_APPS = [
+    # App do simulador web ANTES DO AUTH
+    "simulador_web",
+
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -40,8 +43,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # App do simulador web
-    "simulador_web",
 ]
 
 # --------------------------------------------------
@@ -139,3 +140,18 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGOUT_REDIRECT_URL = "/"
+
+
+# ============================
+# EMAIL (envio de leads)
+# ============================
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
+
