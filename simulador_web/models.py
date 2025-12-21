@@ -67,3 +67,31 @@ class PlanAssetList(models.Model):
 
     def __str__(self):
         return f"Ativos do plano {self.plan}"
+
+
+class Lead(models.Model):
+    PLANO_CHOICES = (
+        ("trial", "Trial"),
+        ("pro", "Pro"),
+    )
+
+    STATUS_CHOICES = (
+        ("novo", "Novo"),
+        ("contatado", "Contatado"),
+        ("convertido", "Convertido"),
+    )
+
+    nome = models.CharField(max_length=120)
+    email = models.EmailField()
+    whatsapp = models.CharField(max_length=20)
+    cpf = models.CharField(max_length=14)
+    plano_interesse = models.CharField(max_length=10, choices=PLANO_CHOICES)
+
+    observacao = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="novo")
+
+    ip_origem = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.nome} - {self.email} ({self.plano_interesse})"

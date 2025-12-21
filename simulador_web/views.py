@@ -12,6 +12,9 @@ from django.contrib.auth import logout
 from django.shortcuts import redirect
 from django.contrib import messages
 from django.utils import timezone
+from django.http import JsonResponse
+from simulador_web.models import Lead
+import json
 
 import asyncio
 
@@ -495,6 +498,36 @@ def sair(request):
     logout(request)
     return redirect("landing")
 
-def planos(request):
-    return render(request, "simulador_web/planos.html")
 
+def planos(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+
+            plano = data.get("plano", "").strip()
+            if plano not in ("trial", "pro"):
+                return JsonResponse({"ok": False}, status=400)
+
+            # captura de IP (proxy-safe)
+            ip = request.META.get("HTTP_X_FORWARDED_FOR")
+            if ip:
+                ip = ip.split(",")[0].strip()
+            else:
+                ip = request.META.get("REMOTE_ADDR")
+
+            Lead.objects.create(
+                nome=data.get("nome", "").strip(),
+                email=data.get("email", "").strip(),
+                whatsapp=data.get("whatsapp", "").strip(),
+                cpf=data.get("cpf", "").strip(),
+                plano_interesse=plano,
+                status="novo",
+                ip_origem=ip,
+            )
+
+            return JsonResponse({"ok": True})
+
+        except Exception:
+            return JsonResponse({"ok": False}, status=400)
+
+    return render(request, "simulador_web/planos.html")

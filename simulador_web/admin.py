@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from .models import Subscription, Role
 from .models import PlanAssetList
+from .models import Lead
 
 User = get_user_model()
 
@@ -31,6 +32,37 @@ class CustomUserAdmin(UserAdmin):
                 user=obj,
                 end_date=timezone.now().date() + timezone.timedelta(days=30),
             )
+
+
+@admin.register(Lead)
+class LeadAdmin(admin.ModelAdmin):
+    list_display = (
+        "nome",
+        "email",
+        "whatsapp",
+        "plano_interesse",
+        "status",
+        "ip_origem",
+        "created_at",
+    )
+
+    list_filter = ("plano_interesse", "status", "created_at")
+    search_fields = ("nome", "email", "whatsapp", "cpf")
+    ordering = ("-created_at",)
+
+    fields = (
+        "nome",
+        "email",
+        "whatsapp",
+        "cpf",
+        "plano_interesse",
+        "status",
+        "observacao",
+        "ip_origem",
+        "created_at",
+    )
+
+    readonly_fields = ("created_at",)
 
 
 admin.site.unregister(User)

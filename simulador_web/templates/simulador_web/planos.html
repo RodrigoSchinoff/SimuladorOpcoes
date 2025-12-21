@@ -171,7 +171,7 @@ footer{
 
   <div class="form-box" id="form-trial">
     <form onsubmit="return validarCPF(this)">
-      <input type="hidden" value="trial">
+      <input type="hidden" name="plano" value="trial">
       <input name="nome" placeholder="Nome" required>
       <input name="email" type="email" placeholder="E-mail" required>
       <input name="whatsapp" placeholder="WhatsApp" required>
@@ -203,7 +203,7 @@ footer{
 
   <div class="form-box" id="form-pro">
     <form onsubmit="return validarCPF(this)">
-      <input type="hidden" value="pro">
+      <input type="hidden" name="plano" value="pro">
       <input name="nome" placeholder="Nome" required>
       <input name="email" type="email" placeholder="E-mail" required>
       <input name="whatsapp" placeholder="WhatsApp" required>
@@ -227,6 +227,13 @@ footer{
 function toggleForm(plano){
   const el = document.getElementById("form-"+plano);
   el.style.display = el.style.display === "block" ? "none" : "block";
+}
+
+function getCookie(name){
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+  return null;
 }
 
 function validarCPF(form){
@@ -254,8 +261,35 @@ function validarCPF(form){
   if(resto===10||resto===11) resto=0;
   if(resto!==parseInt(cpf[10])){ error.style.display="block"; return false; }
 
-  form.style.display="none";
-  success.style.display="block";
+  // Envio para backend (sem reload)
+  const payload = {
+    plano: (form.querySelector("input[name='plano']")?.value || "").trim(),
+    nome: (form.querySelector("input[name='nome']")?.value || "").trim(),
+    email: (form.querySelector("input[name='email']")?.value || "").trim(),
+    whatsapp: (form.querySelector("input[name='whatsapp']")?.value || "").trim(),
+    cpf: cpf
+  };
+
+  fetch("/app/planos/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken")
+    },
+    body: JSON.stringify(payload)
+  })
+  .then(async (resp) => {
+    if (!resp.ok) {
+      throw new Error("Falha ao enviar solicitação.");
+    }
+    form.style.display="none";
+    success.style.display="block";
+  })
+  .catch(() => {
+    error.textContent = "Não foi possível enviar agora. Tente novamente.";
+    error.style.display="block";
+  });
+
   return false;
 }
 </script>
