@@ -508,6 +508,11 @@ def planos(request):
             if plano not in ("trial", "pro"):
                 return JsonResponse({"ok": False}, status=400)
 
+            nome = data.get("nome", "").strip()
+            email = data.get("email", "").strip()
+            whatsapp = data.get("whatsapp", "").strip()
+            cpf = data.get("cpf", "").strip()
+
             # captura de IP (proxy-safe)
             ip = request.META.get("HTTP_X_FORWARDED_FOR")
             if ip:
@@ -515,15 +520,47 @@ def planos(request):
             else:
                 ip = request.META.get("REMOTE_ADDR")
 
+            # 1) salva o lead (fonte da verdade)
             Lead.objects.create(
-                nome=data.get("nome", "").strip(),
-                email=data.get("email", "").strip(),
-                whatsapp=data.get("whatsapp", "").strip(),
-                cpf=data.get("cpf", "").strip(),
+                nome=nome,
+                email=email,
+                whatsapp=whatsapp,
+                cpf=cpf,
                 plano_interesse=plano,
                 status="novo",
                 ip_origem=ip,
             )
+
+            # 2) envia e-mail (não crítico)
+            resend_key = os.getenv("RESEND_API_KEY")
+            if resend_key:
+                try:
+                    import requests
+
+                    requests.post(
+                        "https://api.resend.com/emails",
+                        headers={
+                            "Authorization": f"Bearer {resend_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "from": "StraddlePro <onboarding@resend.dev>",
+                            "to": ["rodrigo.scholiveira@gmail.com"],
+                            "subject": "Novo lead – StraddlePro",
+                            "text": (
+                                "Novo lead recebido:\n\n"
+                                f"Nome: {nome}\n"
+                                f"E-mail: {email}\n"
+                                f"WhatsApp: {whatsapp}\n"
+                                f"CPF: {cpf}\n"
+                                f"Plano: {plano}\n"
+                                f"IP: {ip}"
+                            ),
+                        },
+                        timeout=5,
+                    )
+                except Exception:
+                    pass  # e-mail nunca pode quebrar o fluxo
 
             return JsonResponse({"ok": True})
 
