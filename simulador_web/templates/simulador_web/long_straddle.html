@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Long Straddle – Screener</title>
+    <title>Long Straddle – Screener ATM</title>
 
     <style>
         body {
@@ -11,7 +11,6 @@
             background: #f5f5f5;
         }
 
-        /* ===== TOP BAR ===== */
         .top-bar {
             display: flex;
             justify-content: flex-end;
@@ -77,10 +76,6 @@
             cursor: pointer;
         }
 
-        .btn:hover {
-            background: #1d4ed8;
-        }
-
         table {
             width: 100%;
             border-collapse: collapse;
@@ -98,11 +93,11 @@
             text-align: right;
         }
 
-        th:first-child, td:first-child {
+        th.left, td.left {
             text-align: left;
         }
 
-        .text-right {
+        td {
             text-align: right;
         }
 
@@ -121,10 +116,9 @@
 </head>
 <body>
 
-<!-- ===== TOP BAR ===== -->
+<!-- TOP BAR -->
 <div class="top-bar">
     <span>Usuário: <strong>{{ request.user }}</strong></span>
-
     <div class="logout-box">
         <form method="post" action="/accounts/logout/">
             {% csrf_token %}
@@ -140,14 +134,12 @@
         <div class="erro">{{ erro }}</div>
     {% endif %}
 
-    <!-- ===== FORM DO SCREENER ===== -->
+    <!-- FORM -->
     <form method="get" id="screener_form">
-
         <div id="status_msg" class="aviso"></div>
 
         <div class="form-row">
-
-            <div style="display:flex; flex-direction:column; min-width:180px;">
+            <div>
                 <label>Ativo</label>
                 <input type="text" name="ativo" value="{{ ativo }}" placeholder="Ex.: PETR4 (vazio = vários)">
             </div>
@@ -159,10 +151,11 @@
 
             <div>
                 <label>Horizonte</label>
+
                 <select name="horizonte" id="id_horizonte">
-                    <option value="Vencimento" {% if horizonte == "Vencimento" %}selected{% endif %}>Vencimento</option>
-                    <option value="D+1" {% if horizonte == "D+1" %}selected{% endif %}>D+1</option>
+                    <option value="D+1" selected>D+1</option>
                 </select>
+
             </div>
 
             <div>
@@ -187,55 +180,66 @@
             <div>
                 <button class="btn" type="submit" id="btn_rodar">Rodar Screener</button>
             </div>
-
         </div>
     </form>
 </div>
 
 {% if linhas_screener %}
-<div class="card" id="resultado_card">
-    <table>
-        <thead>
-        <tr>
-            <th>CALL</th>
-            <th>PUT</th>
-            <th>Strike</th>
-            <th>%BE↓</th>
-            <th>BE↓</th>
-            <th>%BE↑</th>
-            <th>BE↑</th>
-            <th>Spot</th>
-            <th>Prêmio Total</th>
-            <th>Lote CALL</th>
-            <th>Lote PUT</th>
-            <th>Custo</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for r in linhas_screener %}
-            <tr>
-                <td>{{ r.call }}</td>
-                <td>{{ r.put }}</td>
-                <td class="text-right">{{ r.strike|floatformat:2 }}</td>
-                <td class="text-right">{{ r.be_pct_down|floatformat:2 }}</td>
-                <td class="text-right">{{ r.be_down|floatformat:2 }}</td>
-                <td class="text-right">{{ r.be_pct_up|floatformat:2 }}</td>
-                <td class="text-right">{{ r.be_up|floatformat:2 }}</td>
-                <td class="text-right">{{ r.spot|floatformat:2 }}</td>
-                <td class="text-right">{{ r.premium_total|floatformat:2 }}</td>
-                <td class="text-right">{{ r.qty_call }}</td>
-                <td class="text-right">{{ r.qty_put }}</td>
-                <td class="text-right">R$ {{ r.custo_operacao|floatformat:2 }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+<div class="card">
+<table>
+    <thead>
+    <tr>
+        <th class="left">CALL</th>
+        <th class="left">PUT</th>
+        <th>Strike</th>
+        <th>%BE↓</th>
+        <th>BE↓</th>
+        <th>%BE↑</th>
+        <th>BE↑</th>
+        <th>Spot</th>
+        <th>Prêmio Total</th>
+        <th>Prêmio CALL</th>
+        <th>Δ CALL</th>
+        <th>Prêmio PUT</th>
+        <th>Δ PUT</th>
+        <th>Vencimento</th>
+        <th>Lote CALL</th>
+        <th>Lote PUT</th>
+        <th>Custo Operação</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for r in linhas_screener %}
+    <tr>
+        <td class="left">{{ r.call }}</td>
+        <td class="left">{{ r.put }}</td>
+
+        <td>{{ r.strike|floatformat:2 }}</td>
+        <td>{{ r.be_pct_down|floatformat:2 }}</td>
+        <td>{{ r.be_down|floatformat:2 }}</td>
+        <td>{{ r.be_pct_up|floatformat:2 }}</td>
+        <td>{{ r.be_up|floatformat:2 }}</td>
+        <td>{{ r.spot|floatformat:2 }}</td>
+
+        <td>{{ r.premium_total|floatformat:4 }}</td>
+        <td>{{ r.call_premio|floatformat:4 }}</td>
+        <td>{{ r.call_delta|floatformat:4 }}</td>
+        <td>{{ r.put_premio|floatformat:4 }}</td>
+        <td>{{ r.put_delta|floatformat:4 }}</td>
+
+        <td>{{ r.due_date }}</td>
+        <td>{{ r.qty_call }}</td>
+        <td>{{ r.qty_put }}</td>
+        <td>R$ {{ r.custo_operacao }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
 </div>
 {% endif %}
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-
     const form = document.getElementById("screener_form");
     const btn = document.getElementById("btn_rodar");
     const status = document.getElementById("status_msg");

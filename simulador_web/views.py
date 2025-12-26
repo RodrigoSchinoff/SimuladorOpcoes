@@ -273,16 +273,35 @@ async def long_straddle(request):
 
         if horizonte == "D+1" and linhas_atm:
 
-            def _mid(d):
+            # >>> AJUSTE D+1 (LOG / MID / BS)
+            # Logs ativados por padrão em ambiente local.
+            # Para desligar explicitamente: export LS_D1_LOG=0
+            log_d1 = os.getenv("LS_D1_LOG", "1") == "1"
+
+            def _px_ref(d):
+                """
+                Preço de referência para mercado:
+                - Se bid>0 e ask>0 => MID
+                - Senão => fallback (ask/last/close/bid)
+                Retorna: (preco, src, bid, ask)
+                """
                 b = _to_float(d.get("bid"))
                 a = _to_float(d.get("ask"))
+                last = _to_float(d.get("last"))
+                close = _to_float(d.get("close"))
+
                 if b > 0 and a > 0:
-                    return (b + a) / 2.0
-                for k in ("ask", "last", "close", "bid"):
-                    v = _to_float(d.get(k))
-                    if v > 0:
-                        return v
-                return 0.0
+                    return (b + a) / 2.0, "MID", b, a
+
+                if a > 0:
+                    return a, "ASK", b, a
+                if last > 0:
+                    return last, "LAST", b, a
+                if close > 0:
+                    return close, "CLOSE", b, a
+                if b > 0:
+                    return b, "BID", b, a
+                return 0.0, "ZERO", b, a
 
             def _implied_or_min(preco, S, K, r, T, kind):
                 try:
@@ -330,34 +349,63 @@ async def long_straddle(request):
 
                     Kc = _to_float(cd.get("strike"))
                     Kp = _to_float(pd.get("strike"))
+
                     Tc = _T_years(cd.get("days_to_maturity"))
                     Tp = _T_years(pd.get("days_to_maturity"))
+
+                    # D+1 => reduz 1 dia útil
                     Tc1 = max(Tc - 1/252.0, 1e-6)
                     Tp1 = max(Tp - 1/252.0, 1e-6)
 
-                    Pc_mkt = _mid(cd)
-                    Pp_mkt = _mid(pd)
+                    Pc_mkt, src_c, bid_c, ask_c = _px_ref(cd)
+                    Pp_mkt, src_p, bid_p, ask_p = _px_ref(pd)
 
+                    if log_d1:
+                        print(f"[D+1][PX][CALL] {call_sym} | bid={bid_c:.4f} | ask={ask_c:.4f} | src={src_c} | px={Pc_mkt:.4f}", flush=True)
+                        print(f"[D+1][PX][PUT ] {put_sym} | bid={bid_p:.4f} | ask={ask_p:.4f} | src={src_p} | px={Pp_mkt:.4f}", flush=True)
+
+                    # IV de mercado (a partir do preço de mercado)
                     sig_c = _implied_or_min(Pc_mkt, S, Kc, r_aa, Tc, "CALL")
                     sig_p = _implied_or_min(Pp_mkt, S, Kp, r_aa, Tp, "PUT")
 
+                    # IV pós-crush para o cenário D+1
                     sig_c1 = max(1e-4, sig_c * f)
                     sig_p1 = max(1e-4, sig_p * f)
 
-                    Pc1 = black_scholes(S, Kc, r_aa, 0.0, sig_c1, Tc1, "CALL")["preco"]
-                    Pp1 = black_scholes(S, Kp, r_aa, 0.0, sig_p1, Tp1, "PUT")["preco"]
+                    # BS do cenário (para delta/greeks), mas prêmio exibido vem do mercado (px_ref)
+                    bs_c = black_scholes(S, Kc, r_aa, 0.0, sig_c1, Tc1, "CALL") or {}
+                    bs_p = black_scholes(S, Kp, r_aa, 0.0, sig_p1, Tp1, "PUT") or {}
 
-                    r["call_premio"] = Pc1
-                    r["put_premio"] = Pp1
-                    r["premium_total"] = Pc1 + Pp1
-                    r["be_down"] = round(Kp - (Pc1 + Pp1), 4)
-                    r["be_up"] = round(Kc + (Pc1 + Pp1), 4)
+                    d_c = bs_c.get("delta")
+                    d_p = bs_p.get("delta")
+
+                    if log_d1:
+                        print(f"[D+1][BS][CALL] {call_sym} | IV_mkt={sig_c:.4f} | IV_crush={sig_c1:.4f} | delta={d_c}", flush=True)
+                        print(f"[D+1][BS][PUT ] {put_sym} | IV_mkt={sig_p:.4f} | IV_crush={sig_p1:.4f} | delta={d_p}", flush=True)
+
+                    # Prêmios exibidos no D+1 = preço de mercado (MID quando possível)
+                    r["call_premio"] = Pc_mkt
+                    r["put_premio"] = Pp_mkt
+                    prem_total = Pc_mkt + Pp_mkt
+                    r["premium_total"] = prem_total
+
+                    # BE coerente com o prêmio exibido (corrige bug Pc1/Pp1 inexistentes)
+                    r["be_down"] = round(Kp - prem_total, 4)
+                    r["be_up"] = round(Kc + prem_total, 4)
+
+                    # Atualiza deltas para D+1 (sem depender do screener)
+                    if d_c is not None:
+                        r["call_delta"] = round(_to_float(d_c), 4)
+                    if d_p is not None:
+                        r["put_delta"] = round(_to_float(d_p), 4)
+
                     r["spot"] = S
 
                 except:
                     continue
 
             aviso_horizonte = f"Cálculo D+1 aplicado com Crush IV de {crush_iv:.1f}%."
+            # <<< FIM AJUSTE D+1
         else:
             aviso_horizonte = None
 
@@ -388,7 +436,15 @@ async def long_straddle(request):
             r = dict(r)
             r["qty_call"] = qty_call
             r["qty_put"] = qty_put
-            r["custo_operacao"] = custo_oper
+
+            import locale
+            locale.setlocale(locale.LC_ALL, "pt_BR.UTF-8")
+
+            r["custo_operacao"] = locale.format_string(
+                "%.2f",
+                custo_oper,
+                grouping=True
+            )
 
             if r.get("spot_oficial") is not None:
                 spot_ref = _to_float(r["spot_oficial"])
