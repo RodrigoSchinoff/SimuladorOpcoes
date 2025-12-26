@@ -38,6 +38,17 @@ LISTA_ATIVOS_PADRAO = [
 ]
 
 
+def fmt_brl(v):
+    """
+    Formatação pt-BR sem símbolo de moeda.
+    Ex: 5931.5 -> "5.931,50"
+    """
+    try:
+        return f"{float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return "0,00"
+
+
 def _to_float(v, default=0.0):
     try:
         if v is None:
@@ -87,11 +98,14 @@ def home(request):
 # cache local (global no módulo)
 _ls_cache = {}
 
+
 async def acquire_lock_async(key):
     return await asyncio.to_thread(acquire_lock, key)
 
+
 async def release_lock_async(key):
     await asyncio.to_thread(release_lock, key)
+
 
 @sync_to_async
 def get_tickers_for_user(user):
@@ -99,9 +113,11 @@ def get_tickers_for_user(user):
     pal = PlanAssetList.objects.get(plan=plan)
     return list(pal.assets)
 
+
 def _redirect_landing_inactive(request):
     messages.error(request, "Sua assinatura está expirada ou bloqueada. Regularize para continuar.")
     return redirect("/accounts/login/")
+
 
 @subscription_required
 async def long_straddle(request):
@@ -144,7 +160,6 @@ async def long_straddle(request):
             "aviso_horizonte": None,
         }
         return render(request, "simulador_web/long_straddle.html", contexto)
-
 
     # ---------------------------------------------------------
     # PARÂMETROS DO FORM + CHAVE DE CACHE
@@ -437,14 +452,8 @@ async def long_straddle(request):
             r["qty_call"] = qty_call
             r["qty_put"] = qty_put
 
-            import locale
-            locale.setlocale(locale.LC_ALL, "pt_BR.UTF-8")
-
-            r["custo_operacao"] = locale.format_string(
-                "%.2f",
-                custo_oper,
-                grouping=True
-            )
+            # ✅ Substituição mínima: remove locale e mantém padrão R$ 5.931,50
+            r["custo_operacao"] = fmt_brl(custo_oper)
 
             if r.get("spot_oficial") is not None:
                 spot_ref = _to_float(r["spot_oficial"])
@@ -549,6 +558,7 @@ async def long_straddle(request):
     }
 
     return render(request, "simulador_web/long_straddle.html", contexto)
+
 
 def sair(request):
     logout(request)
