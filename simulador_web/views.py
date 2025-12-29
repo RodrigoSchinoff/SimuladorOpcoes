@@ -126,7 +126,11 @@ async def long_straddle(request):
     # BLOQUEIO DEFINITIVO: expirada / blocked / inválida
     # (antes de qualquer execução, cache, lock ou API)
     # =====================================================
+    if not request.user.is_authenticated:
+        return redirect("/accounts/login/?next=/app/ls/")
+
     sub = getattr(request.user, "subscription", None)
+
     if not sub:
         return _redirect_landing_inactive(request)
 

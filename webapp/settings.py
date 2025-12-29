@@ -154,3 +154,17 @@ EMAIL_HOST_PASSWORD = os.getenv("RESEND_API_KEY")
 DEFAULT_FROM_EMAIL = "StraddlePro <onboarding@resend.dev>"
 
 
+# =====================================================
+# CONTROLE DE SESSÃO – SEGURANÇA SAAS
+# =====================================================
+
+# Expira sessão após 2 horas de inatividade
+SESSION_COOKIE_AGE = 60 * 60 * 2  # 2 horas
+
+# Renova o tempo da sessão a cada request válido
+SESSION_SAVE_EVERY_REQUEST = True
+
+# Força logout ao fechar o navegador
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+
