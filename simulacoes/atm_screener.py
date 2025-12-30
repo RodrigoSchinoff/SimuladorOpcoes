@@ -86,7 +86,13 @@ def _choose_leg(legs: List[Dict[str, Any]]):
 # Dois strikes ATM
 # ------------------------------------------------------------
 def _two_atm_strikes(ks, spot):
-    ks = sorted(set(round(k, 2) for k in ks if k > 0))
+    ks = sorted(
+        set(
+            round(k, 2)
+            for k in ks
+            if k > 0 and (0.5 * spot) <= k <= (2.0 * spot)
+        )
+    )
     if not ks:
         return []
 
