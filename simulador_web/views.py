@@ -418,7 +418,7 @@ async def long_straddle(request):
                     if d_p is not None:
                         r["put_delta"] = round(_to_float(d_p), 4)
 
-                    r["spot"] = S
+                    S = r["spot"]  # usa o mesmo spot do screener ATM
 
                 except:
                     continue

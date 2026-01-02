@@ -86,7 +86,8 @@ def _choose_leg(legs: List[Dict[str, Any]]):
 # Dois strikes ATM
 # ------------------------------------------------------------
 def _two_atm_strikes(ks, spot):
-    ks = sorted(set(round(k, 2) for k in ks if k > 0))
+    ks = sorted(set(k for k in ks if k > 0))
+
     if not ks:
         return []
 
@@ -212,6 +213,9 @@ def _pairs_for_due(scid, ticker, due_date, ops, spot):
             "due_date": due_date,
             "strike": float(k),
             "spot": spot_r,
+
+            # ✅ NOVO: necessário para implied_vol na Etapa 7
+            "days_to_maturity": dias,
 
             # RESTAURADO
             "premium_total": round(prem_total, 4),

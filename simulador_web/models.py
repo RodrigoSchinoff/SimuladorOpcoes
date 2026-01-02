@@ -95,3 +95,44 @@ class Lead(models.Model):
 
     def __str__(self):
         return f"{self.nome} - {self.email} ({self.plano_interesse})"
+
+
+# =========================================================
+# NOVO MODEL — HISTÓRICO DE IV ATM (LONG STRADDLE)
+# =========================================================
+
+class IvAtmHistorico(models.Model):
+    ticker = models.CharField(max_length=20)
+    trade_date = models.DateField()
+
+    spot_price = models.DecimalField(max_digits=15, decimal_places=4)
+
+    # CALL ATM
+    call_symbol = models.CharField(max_length=30)
+    call_due_date = models.DateField()
+    call_days_to_maturity = models.IntegerField()
+    call_premium = models.DecimalField(max_digits=15, decimal_places=6)
+    call_volatility = models.DecimalField(max_digits=10, decimal_places=6)
+
+    # PUT ATM
+    put_symbol = models.CharField(max_length=30)
+    put_due_date = models.DateField()
+    put_days_to_maturity = models.IntegerField()
+    put_premium = models.DecimalField(max_digits=15, decimal_places=6)
+    put_volatility = models.DecimalField(max_digits=10, decimal_places=6)
+
+    # Média diária
+    iv_atm_mean = models.DecimalField(max_digits=10, decimal_places=6)
+
+    # Auditoria
+    processed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "iv_atm_historico"
+        unique_together = ("ticker", "trade_date")
+        indexes = [
+            models.Index(fields=["ticker", "trade_date"]),
+        ]
+
+    def __str__(self):
+        return f"{self.ticker} - {self.trade_date}"
