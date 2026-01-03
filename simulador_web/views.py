@@ -14,6 +14,8 @@ from django.contrib import messages
 from django.utils import timezone
 from django.http import JsonResponse
 from simulador_web.models import Lead
+from simulador_web.domain.iv_atm_decision import build_iv_decisao
+
 import json
 
 import asyncio
@@ -147,7 +149,9 @@ async def long_straddle(request):
 
     # 🔒 EVITAR EXECUÇÃO AUTOMÁTICA (HEAD / GET VAZIO)
     if request.method == "HEAD":
-        return render(request, "simulador_web/long_straddle.html", {})
+        contexto = {}
+        contexto["iv_decisao"] = build_iv_decisao(request, "")
+        return render(request, "simulador_web/long_straddle.html", contexto)
 
     if not request.GET:
         contexto = {
@@ -163,6 +167,7 @@ async def long_straddle(request):
             "be_max_pct": None,
             "aviso_horizonte": None,
         }
+        contexto["iv_decisao"] = build_iv_decisao(request, "")
         return render(request, "simulador_web/long_straddle.html", contexto)
 
     # ---------------------------------------------------------
@@ -189,14 +194,24 @@ async def long_straddle(request):
     global _ls_cache
     cached = _ls_cache.get(cache_key)
     if cached and now_ts - cached["ts"] <= ttl_ls:
-        return render(request, "simulador_web/long_straddle.html", cached["data"])
+        contexto = dict(cached["data"])
+        contexto["iv_decisao"] = await asyncio.to_thread(
+            build_iv_decisao, request, ativo
+        )
+
+        return render(request, "simulador_web/long_straddle.html", contexto)
 
     # Anti-stampede: aguardar lock se cache frio
     if not await acquire_lock_async(cache_key):
         # não conseguiu lock → tentar ler cache novamente (outro thread pode ter gerado)
         cached = _ls_cache.get(cache_key)
         if cached:
-            return render(request, "simulador_web/long_straddle.html", cached["data"])
+            contexto = dict(cached["data"])
+            contexto["iv_decisao"] = await asyncio.to_thread(
+                build_iv_decisao, request, ativo
+            )
+
+            return render(request, "simulador_web/long_straddle.html", contexto)
         raise Exception("Sistema ocupado, tente novamente em instantes.")
 
     # ---------------------------------------------------------
@@ -216,6 +231,7 @@ async def long_straddle(request):
             "be_max_pct": None,
             "aviso_horizonte": None,
         }
+        contexto["iv_decisao"] = build_iv_decisao(request, "")
         return render(request, "simulador_web/long_straddle.html", contexto)
 
     try:
@@ -229,7 +245,6 @@ async def long_straddle(request):
         # ------------------------------------------------------
         # 2) RODAR SCREENER ATM PARA CADA TICKER (ASSÍNCRONO)
         # ------------------------------------------------------
-        import asyncio
 
         async def run_screener(tkr):
             return await asyncio.to_thread(atualizar_e_screener_atm_2venc, tkr, False)
@@ -554,12 +569,24 @@ async def long_straddle(request):
         await release_lock_async(cache_key)
 
     # ---------------------------------------------------------
+    # INJETAR IV DECISÃO (FORÇADO)
+    # ---------------------------------------------------------
+    contexto["iv_decisao"] = await asyncio.to_thread(
+        build_iv_decisao, request, ativo
+    )
+
+    # ---------------------------------------------------------
     # SALVAR RESULTADO FINAL NO CACHE
     # ---------------------------------------------------------
     _ls_cache[cache_key] = {
         "ts": time.time(),
         "data": contexto
     }
+
+    # >>> IV HISTÓRICA (FORA DO CACHE) <<<
+    contexto["iv_decisao"] = await asyncio.to_thread(
+        build_iv_decisao, request, ativo
+    )
 
     return render(request, "simulador_web/long_straddle.html", contexto)
 

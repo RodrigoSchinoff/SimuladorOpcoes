@@ -43,6 +43,34 @@
             box-shadow: 0 1px 4px rgba(0,0,0,0.06);
         }
 
+        /* ===== BOX IV ===== */
+        .iv-box {
+            margin: 8px 0 12px 0;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            background: #f8fafc;
+            border-left: 5px solid #cbd5e1;
+        }
+
+        .iv-caro   { border-left-color: #dc2626; }
+        .iv-justo  { border-left-color: #f59e0b; }
+        .iv-barato { border-left-color: #16a34a; }
+        .iv-erro {
+            border-left-color: #b91c1c;
+            background: #fef2f2;
+        }
+
+        .iv-titulo {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .iv-motivo {
+            font-size: 12px;
+            color: #374151;
+        }
+
         .form-row {
             display: flex;
             flex-wrap: wrap;
@@ -130,6 +158,39 @@
 <div class="card">
     <h1>Long Straddle – Screener ATM</h1>
 
+    <!-- ===== AVALIAÇÃO DE IV HISTÓRICA ===== -->
+    {% if iv_decisao %}
+    <div class="iv-box
+        {% if iv_decisao.classificacao == 'CARO' %}iv-caro
+        {% elif iv_decisao.classificacao == 'BARATO' %}iv-barato
+        {% else %}iv-justo{% endif %}">
+
+        <div class="iv-titulo">
+            Volatilidade Implícita: {{ iv_decisao.classificacao }}
+            <span title="
+    IV atual: {{ iv_decisao.iv_atual_pct|floatformat:2 }}%
+
+    Referências históricas (últimos {{ iv_decisao.janela }} pregões):
+    Baixa (25% das vezes): {{ iv_decisao.iv_baixa_pct|floatformat:2 }}%
+    Normal (mediana): {{ iv_decisao.iv_normal_pct|floatformat:2 }}%
+    Alta (25% das vezes): {{ iv_decisao.iv_alta_pct|floatformat:2 }}%
+
+            ">ⓘ</span>
+        </div>
+
+        <div class="iv-motivo">
+            {{ iv_decisao.motivo }}
+        </div>
+    </div>
+
+    {% elif ativo %}
+    <div class="iv-box iv-bloqueado">
+        🔒 Avaliação de volatilidade histórica disponível apenas no
+        <strong>Plano Pro</strong>.
+    </div>
+    {% endif %}
+
+
     {% if erro %}
         <div class="erro">{{ erro }}</div>
     {% endif %}
@@ -141,7 +202,7 @@
         <div class="form-row">
             <div>
                 <label>Ativo</label>
-                <input type="text" name="ativo" value="{{ ativo }}" placeholder="Ex.: PETR4 (vazio = vários)">
+                <input type="text" name="ativo" value="{{ ativo }}" placeholder="Ex.: PETR4">
             </div>
 
             <div>
@@ -151,16 +212,27 @@
 
             <div>
                 <label>Horizonte</label>
-
                 <select name="horizonte" id="id_horizonte">
                     <option value="D+1" selected>D+1</option>
                 </select>
-
             </div>
 
             <div>
                 <label>Crush IV (%)</label>
                 <input type="number" step="0.1" id="id_crush_iv" name="crush_iv" value="{{ crush_iv }}">
+            </div>
+
+            <!-- >>> NOVO CAMPO: IV MANUAL EM % <<< -->
+            <div>
+                <label>IV Manual (%)</label>
+                <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="200"
+                    name="iv_override"
+                    value="{{ request.GET.iv_override }}"
+                    placeholder="Ex.: 35">
             </div>
 
             <div>
@@ -213,20 +285,17 @@
     <tr>
         <td class="left">{{ r.call }}</td>
         <td class="left">{{ r.put }}</td>
-
         <td>{{ r.strike|floatformat:2 }}</td>
         <td>{{ r.be_pct_down|floatformat:2 }}</td>
         <td>{{ r.be_down|floatformat:2 }}</td>
         <td>{{ r.be_pct_up|floatformat:2 }}</td>
         <td>{{ r.be_up|floatformat:2 }}</td>
         <td>{{ r.spot|floatformat:2 }}</td>
-
         <td>{{ r.premium_total|floatformat:4 }}</td>
         <td>{{ r.call_premio|floatformat:4 }}</td>
         <td>{{ r.call_delta|floatformat:4 }}</td>
         <td>{{ r.put_premio|floatformat:4 }}</td>
         <td>{{ r.put_delta|floatformat:4 }}</td>
-
         <td>{{ r.due_date }}</td>
         <td>{{ r.qty_call }}</td>
         <td>{{ r.qty_put }}</td>
