@@ -11,6 +11,9 @@ from services.api import buscar_opcoes_ativo, get_spot_ativo_oficial
 from services.api_bs import bs_greeks
 from simulacoes.utils import extrair_float as _f, preco_compra_premio as _prem
 
+from django.core.cache import cache
+from core.cache_keys import screener_cache_key
+
 
 # ------------------------------------------------------------
 # LOG HELPERS
@@ -24,8 +27,10 @@ def _log(scid: str, msg: str):
 # ------------------------------------------------------------
 def _third_friday(d: date) -> date:
     c = calendar.Calendar(firstweekday=calendar.MONDAY)
-    fridays = [dt for dt in c.itermonthdates(d.year, d.month)
-               if dt.weekday() == 4 and dt.month == d.month]
+    fridays = [
+        dt for dt in c.itermonthdates(d.year, d.month)
+        if dt.weekday() == 4 and dt.month == d.month
+    ]
     return fridays[2]
 
 
@@ -36,10 +41,16 @@ def _next_two_official_dues(today: date, ops: List[dict]) -> List[str]:
     for _ in range(12):
         due = _third_friday(d).strftime("%Y-%m-%d")
 
-        has_call = any(o for o in ops if o["due_date"][:10] == due
-                       and (o.get("category") or "").upper().startswith("CALL"))
-        has_put = any(o for o in ops if o["due_date"][:10] == due
-                      and (o.get("category") or "").upper().startswith("PUT"))
+        has_call = any(
+            o for o in ops
+            if o["due_date"][:10] == due
+            and (o.get("category") or "").upper().startswith("CALL")
+        )
+        has_put = any(
+            o for o in ops
+            if o["due_date"][:10] == due
+            and (o.get("category") or "").upper().startswith("PUT")
+        )
 
         if has_call and has_put:
             valid.append(due)
@@ -87,7 +98,6 @@ def _choose_leg(legs: List[Dict[str, Any]]):
 # ------------------------------------------------------------
 def _two_atm_strikes(ks, spot):
     ks = sorted(set(k for k in ks if k > 0))
-
     if not ks:
         return []
 
@@ -95,7 +105,7 @@ def _two_atm_strikes(ks, spot):
     above = [k for k in ks if k > spot]
 
     k_down = max(below) if below else ks[0]
-    k_up   = min(above) if above else ks[-1]
+    k_up = min(above) if above else ks[-1]
 
     if k_down == k_up:
         i = ks.index(k_up)
@@ -118,7 +128,7 @@ def _bs_delta_local(spot, strike, dias, vol, r, call_flag):
     if spot <= 0 or strike <= 0 or vol <= 0 or dias <= 0:
         return None
     t = dias / 252
-    d1 = (log(spot/strike) + (r + 0.5*vol*vol)*t)/(vol*sqrt(t))
+    d1 = (log(spot/strike) + (r + 0.5*vol*vol)*t) / (vol*sqrt(t))
     nd1 = _norm_cdf(d1)
     return nd1 if call_flag else nd1 - 1
 
@@ -140,13 +150,19 @@ def _iv(o):
 def _pairs_for_due(scid, ticker, due_date, ops, spot):
     t0 = time.perf_counter()
 
-    calls = [o for o in ops if o["due_date"].startswith(due_date)
-             and (o.get("category") or "").upper().startswith("CALL")]
-    puts  = [o for o in ops if o["due_date"].startswith(due_date)
-             and (o.get("category") or "").upper().startswith("PUT")]
+    calls = [
+        o for o in ops
+        if o["due_date"].startswith(due_date)
+        and (o.get("category") or "").upper().startswith("CALL")
+    ]
+    puts = [
+        o for o in ops
+        if o["due_date"].startswith(due_date)
+        and (o.get("category") or "").upper().startswith("PUT")
+    ]
 
     strikes_call = {round(_f(o.get("strike")), 6) for o in calls}
-    strikes_put  = {round(_f(o.get("strike")), 6) for o in puts}
+    strikes_put = {round(_f(o.get("strike")), 6) for o in puts}
     strikes = sorted(strikes_call & strikes_put)
 
     ks = _two_atm_strikes([float(k) for k in strikes], spot)
@@ -154,7 +170,7 @@ def _pairs_for_due(scid, ticker, due_date, ops, spot):
 
     for k in ks:
         cs = [o for o in calls if abs(_f(o.get("strike")) - k) < 1e-6]
-        ps = [o for o in puts  if abs(_f(o.get("strike")) - k) < 1e-6]
+        ps = [o for o in puts if abs(_f(o.get("strike")) - k) < 1e-6]
 
         c = _choose_leg(cs)
         p = _choose_leg(ps)
@@ -172,17 +188,22 @@ def _pairs_for_due(scid, ticker, due_date, ops, spot):
         amount = int((c.get("contract_size") or 100) or 100)
         spot_r = round(spot, 2)
 
-        # DELTAS
         def _delta_leg(o, is_call, vol, premio):
             d_local = _bs_delta_local(spot_r, float(o["strike"]), dias, vol, r, is_call)
             if d_local is not None:
                 return d_local, "LOCAL"
 
             params = dict(
-                symbol=o["symbol"], kind="CALL" if is_call else "PUT",
-                spotprice=spot_r, strike=float(o["strike"]),
-                premium=premio, dtm=dias, vol=vol, irate=0.0,
-                due_date=due_date, amount=amount
+                symbol=o["symbol"],
+                kind="CALL" if is_call else "PUT",
+                spotprice=spot_r,
+                strike=float(o["strike"]),
+                premium=premio,
+                dtm=dias,
+                vol=vol,
+                irate=0.0,
+                due_date=due_date,
+                amount=amount,
             )
             try:
                 resp = bs_greeks(**params, timeout=3)
@@ -192,19 +213,16 @@ def _pairs_for_due(scid, ticker, due_date, ops, spot):
                 return None, "MISS"
 
         with cf.ThreadPoolExecutor(max_workers=2) as ex:
-            f1 = ex.submit(_delta_leg, c, True,  iv_c, prem_c)
+            f1 = ex.submit(_delta_leg, c, True, iv_c, prem_c)
             f2 = ex.submit(_delta_leg, p, False, iv_p, prem_p)
             d_call, src_c = f1.result()
-            d_put,  src_p = f2.result()
+            d_put, src_p = f2.result()
 
-        # -------------------------------------
-        # RESTAURAÇÃO DOS BREAK-EVENS
-        # -------------------------------------
         be_down = round(k - prem_total, 2)
-        be_up   = round(k + prem_total, 2)
+        be_up = round(k + prem_total, 2)
 
         be_pct_down = round(((be_down / spot_r) - 1.0) * 100.0, 2) if spot_r > 0 else None
-        be_pct_up   = round(((be_up   / spot_r) - 1.0) * 100.0, 2) if spot_r > 0 else None
+        be_pct_up = round(((be_up / spot_r) - 1.0) * 100.0, 2) if spot_r > 0 else None
 
         out.append({
             "bucket": "ATM",
@@ -213,37 +231,33 @@ def _pairs_for_due(scid, ticker, due_date, ops, spot):
             "due_date": due_date,
             "strike": float(k),
             "spot": spot_r,
-
-            # ✅ NOVO: necessário para implied_vol na Etapa 7
             "days_to_maturity": dias,
-
-            # RESTAURADO
             "premium_total": round(prem_total, 4),
             "call_premio": round(prem_c, 4),
-            "put_premio":  round(prem_p, 4),
-
+            "put_premio": round(prem_p, 4),
             "be_down": be_down,
             "be_up": be_up,
             "be_pct_down": be_pct_down,
             "be_pct_up": be_pct_up,
-
             "contract_size": amount,
-
             "call_delta": None if d_call is None else round(d_call, 4),
-            "put_delta":  None if d_put  is None else round(d_put, 4),
+            "put_delta": None if d_put is None else round(d_put, 4),
             "src_call": src_c,
             "src_put": src_p,
         })
 
-    dt = time.perf_counter() - t0
-    _log(scid, f"⏱ {ticker} {due_date} | linhas={len(out)} | {dt:.3f}s")
+    _log(scid, f"⏱ {ticker} {due_date} | linhas={len(out)} | {time.perf_counter() - t0:.3f}s")
     return out
 
 
 # ------------------------------------------------------------
 # Screener principal
 # ------------------------------------------------------------
-def screener_atm_dois_vencimentos(ticker: str, hoje: Optional[date] = None) -> Dict[str, List[Dict[str, Any]]]:
+def screener_atm_dois_vencimentos(
+    ticker: str,
+    hoje: Optional[date] = None
+) -> Dict[str, List[Dict[str, Any]]]:
+
     scid = f"SC-{uuid.uuid4().hex[:6]}"
     t0 = time.perf_counter()
     hoje = hoje or date.today()
@@ -256,6 +270,15 @@ def screener_atm_dois_vencimentos(ticker: str, hoje: Optional[date] = None) -> D
 
     dues = _next_two_official_dues(hoje, ops)
 
+    v1 = dues[0] if len(dues) > 0 else ""
+    v2 = dues[1] if len(dues) > 1 else ""
+    cache_key = screener_cache_key(ticker, v1, v2, "VENC", 0.0)
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        _log(scid, f"♻ CACHE HIT screener {ticker} {v1} {v2}")
+        return cached
+
     spot_oficial = float(get_spot_ativo_oficial(ticker) or 0.0)
     spot = spot_oficial if spot_oficial > 0 else _spot_from_ops(ops)
 
@@ -267,6 +290,12 @@ def screener_atm_dois_vencimentos(ticker: str, hoje: Optional[date] = None) -> D
 
     linhas.sort(key=lambda r: (r["due_date"], abs(_f(r["strike"]) - spot)))
 
-    _log(scid, f"✔ END screener ticker={ticker} | linhas={len(linhas)} | {time.perf_counter()-t0:.3f}s")
+    _log(
+        scid,
+        f"✔ END screener ticker={ticker} | linhas={len(linhas)} | {time.perf_counter() - t0:.3f}s"
+    )
 
-    return {"atm": linhas, "due_dates": dues}
+    result = {"atm": linhas, "due_dates": dues}
+    cache.set(cache_key, result, timeout=600)
+
+    return result
