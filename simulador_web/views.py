@@ -195,9 +195,12 @@ async def long_straddle(request):
     cached = _ls_cache.get(cache_key)
     if cached and now_ts - cached["ts"] <= ttl_ls:
         contexto = dict(cached["data"])
-        contexto["iv_decisao"] = await asyncio.to_thread(
-            build_iv_decisao, request, ativo
-        )
+        if user_plan == "pro":
+            contexto["iv_decisao"] = await asyncio.to_thread(
+                build_iv_decisao, request, ativo
+            )
+        else:
+            contexto["iv_decisao"] = None
 
         return render(request, "simulador_web/long_straddle.html", contexto)
 
@@ -207,9 +210,12 @@ async def long_straddle(request):
         cached = _ls_cache.get(cache_key)
         if cached:
             contexto = dict(cached["data"])
-            contexto["iv_decisao"] = await asyncio.to_thread(
-                build_iv_decisao, request, ativo
-            )
+            if user_plan == "pro":
+                contexto["iv_decisao"] = await asyncio.to_thread(
+                    build_iv_decisao, request, ativo
+                )
+            else:
+                contexto["iv_decisao"] = None
 
             return render(request, "simulador_web/long_straddle.html", contexto)
         raise Exception("Sistema ocupado, tente novamente em instantes.")
@@ -521,6 +527,59 @@ async def long_straddle(request):
             raise ValueError("Nenhuma opção após filtros.")
 
         # ------------------------------------------------------
+        # 6.1) ORDENAÇÃO POR MENOR BE% + REDUÇÃO (APENAS PLANO PRO)
+        # ------------------------------------------------------
+
+        if user_plan == "pro":
+
+            def _be_pct_min(r):
+                vals = []
+                if r.get("be_pct_down") is not None:
+                    vals.append(abs(r["be_pct_down"]))
+                if r.get("be_pct_up") is not None:
+                    vals.append(abs(r["be_pct_up"]))
+                return min(vals) if vals else float("inf")
+
+            # Sempre ordenar por menor BE%
+            linhas_enriquecidas.sort(key=_be_pct_min)
+
+            # Consulta FULL (sem ativo): manter apenas 1 LS por ticker
+            if not ativo:
+                agrupado = {}
+                for r in linhas_enriquecidas:
+                    agrupado.setdefault(r["ticker"], []).append(r)
+
+                linhas_finais = []
+
+                for tkr, rows in agrupado.items():
+
+                    # 🔎 LOG — CANDIDATOS
+                    print(f"[LS-RANK][CANDIDATOS] {tkr}", flush=True)
+                    for r in rows:
+                        print(
+                            f"  call={r.get('call')} put={r.get('put')} | "
+                            f"venc={r.get('due_date')} | "
+                            f"be_pct_down={r.get('be_pct_down'):.4f} "
+                            f"be_pct_up={r.get('be_pct_up'):.4f} | "
+                            f"be_pct_min={_be_pct_min(r):.4f}",
+                            flush=True
+                        )
+
+                    # vencedor = menor BE%
+                    vencedor = rows[0]
+                    linhas_finais.append(vencedor)
+
+                    # 🏆 LOG — ESCOLHIDO
+                    print(
+                        f"[LS-RANK][ESCOLHIDO] {tkr} | "
+                        f"call={vencedor.get('call')} put={vencedor.get('put')} | "
+                        f"be_pct_min={_be_pct_min(vencedor):.4f}",
+                        flush=True
+                    )
+
+                linhas_enriquecidas = linhas_finais
+
+        # ------------------------------------------------------
         # 7) SIMULAÇÃO FINAL
         # ------------------------------------------------------
         from services.api import buscar_detalhes_opcao
@@ -571,9 +630,12 @@ async def long_straddle(request):
     # ---------------------------------------------------------
     # INJETAR IV DECISÃO (FORÇADO)
     # ---------------------------------------------------------
-    contexto["iv_decisao"] = await asyncio.to_thread(
-        build_iv_decisao, request, ativo
-    )
+    if user_plan == "pro":
+        contexto["iv_decisao"] = await asyncio.to_thread(
+            build_iv_decisao, request, ativo
+        )
+    else:
+        contexto["iv_decisao"] = None
 
     # ---------------------------------------------------------
     # SALVAR RESULTADO FINAL NO CACHE
@@ -584,9 +646,12 @@ async def long_straddle(request):
     }
 
     # >>> IV HISTÓRICA (FORA DO CACHE) <<<
-    contexto["iv_decisao"] = await asyncio.to_thread(
-        build_iv_decisao, request, ativo
-    )
+    if user_plan == "pro":
+        contexto["iv_decisao"] = await asyncio.to_thread(
+            build_iv_decisao, request, ativo
+        )
+    else:
+        contexto["iv_decisao"] = None
 
     return render(request, "simulador_web/long_straddle.html", contexto)
 
