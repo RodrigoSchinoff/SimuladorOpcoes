@@ -1,6 +1,7 @@
 # simulacoes/atm_screener.py
 from typing import Dict, Any, List, Optional
-from datetime import date
+from datetime import date, datetime
+import pytz
 import calendar
 import time
 import uuid
@@ -250,6 +251,9 @@ def _pairs_for_due(scid, ticker, due_date, ops, spot):
     return out
 
 
+def _today_brl():
+    return datetime.now(pytz.timezone("America/Sao_Paulo")).date()
+
 # ------------------------------------------------------------
 # Screener principal
 # ------------------------------------------------------------
@@ -260,7 +264,8 @@ def screener_atm_dois_vencimentos(
 
     scid = f"SC-{uuid.uuid4().hex[:6]}"
     t0 = time.perf_counter()
-    hoje = hoje or date.today()
+    #hoje = hoje or date.today()
+    hoje = hoje or _today_brl()
 
     _log(scid, f"▶ START screener_atm_dois_vencimentos ticker={ticker}")
 
