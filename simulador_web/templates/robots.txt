@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://algop.com.br/sitemap.xml
