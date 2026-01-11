@@ -7,6 +7,9 @@ requests>=2.31.0,<3
 # Banco de dados
 psycopg2-binary==2.9.10
 
+# Static files (Render)
+whitenoise
+
 # Flet (MVP desktop ainda funciona)
 flet==0.28.3
 
@@ -15,8 +18,8 @@ numpy
 pandas
 scipy
 
-# Gráficos (caso o payoff use)
+# Gráficos
 matplotlib>=3.8,<4
 
-# Variáveis de ambiente (.env)
+# Variáveis de ambiente
 python-dotenv
