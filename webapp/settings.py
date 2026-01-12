@@ -23,6 +23,7 @@ ALLOWED_HOSTS = [
     "127.0.0.1",
     "0.0.0.0",
     "simuladorls.onrender.com",
+    "algop.onrender.com",
     "algop.com.br",
     "www.algop.com.br",
 ]
