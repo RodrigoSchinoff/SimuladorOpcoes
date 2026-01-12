@@ -277,7 +277,13 @@ def screener_atm_dois_vencimentos(
 
     v1 = dues[0] if len(dues) > 0 else ""
     v2 = dues[1] if len(dues) > 1 else ""
-    cache_key = screener_cache_key(ticker, v1, v2, "VENC", 0.0)
+    cache_key = screener_cache_key(
+        ticker,
+        v1,
+        v2,
+        "VENC",
+        round(spot_oficial, 2),
+    )
 
     cached = cache.get(cache_key)
     if cached is not None:
