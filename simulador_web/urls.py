@@ -4,6 +4,7 @@ from . import views
 
 
 urlpatterns = [
+    path("", long_straddle, name="app_home"),
     path("ls/", long_straddle, name="ls"),
     path("long/", long_straddle, name="long_straddle"),
     path("sair/", views.sair, name="logout"),
