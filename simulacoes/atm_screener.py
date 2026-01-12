@@ -277,6 +277,10 @@ def screener_atm_dois_vencimentos(
 
     v1 = dues[0] if len(dues) > 0 else ""
     v2 = dues[1] if len(dues) > 1 else ""
+
+    spot_oficial = float(get_spot_ativo_oficial(ticker) or 0.0)
+    spot = spot_oficial if spot_oficial > 0 else _spot_from_ops(ops)
+
     cache_key = screener_cache_key(
         ticker,
         v1,
@@ -284,6 +288,7 @@ def screener_atm_dois_vencimentos(
         "VENC",
         round(spot_oficial, 2),
     )
+
 
     cached = cache.get(cache_key)
     if cached is not None:
