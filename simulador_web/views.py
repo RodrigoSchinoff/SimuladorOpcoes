@@ -185,11 +185,16 @@ async def long_straddle(request):
     be_max_pct = float(be_max_pct_raw) if be_max_pct_raw else None
 
     user_plan = request.user.subscription.plan
-    cache_key = ls_cache_key(ativo, horizonte, num_vencimentos, user_plan)
+    cache_key = (
+        f"{ls_cache_key(ativo, horizonte, num_vencimentos, user_plan)}"
+        f"|lot={lote_total}"
+        f"|crush={crush_iv}"
+        f"|be={be_max_pct}"
+    )
 
     import time
     now_ts = time.time()
-    ttl_ls = 200  # segundos de TTL do Long Straddle
+    ttl_ls = 600  # segundos de TTL do Long Straddle
 
     global _ls_cache
     cached = _ls_cache.get(cache_key)
@@ -640,9 +645,12 @@ async def long_straddle(request):
     # ---------------------------------------------------------
     # SALVAR RESULTADO FINAL NO CACHE
     # ---------------------------------------------------------
+    contexto_cache = dict(contexto)
+    contexto_cache["iv_decisao"] = None  # nunca cachear IV decisão
+
     _ls_cache[cache_key] = {
         "ts": time.time(),
-        "data": contexto
+        "data": contexto_cache
     }
 
     # >>> IV HISTÓRICA (FORA DO CACHE) <<<

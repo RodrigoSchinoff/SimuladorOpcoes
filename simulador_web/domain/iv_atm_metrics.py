@@ -62,3 +62,4 @@ def calcular_metricas_iv_atm(
         "p50": _percentil(Decimal("0.50")),
         "p75": _percentil(Decimal("0.75")),
     }
+
