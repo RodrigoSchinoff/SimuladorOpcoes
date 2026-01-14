@@ -63,3 +63,16 @@ def calcular_metricas_iv_atm(
         "p75": _percentil(Decimal("0.75")),
     }
 
+
+def get_iv_ultimos_dias(ivatm_queryset, dias=10):
+    registros = (
+        ivatm_queryset
+        .order_by("-trade_date")
+        .values_list("iv_atm_mean", flat=True)[:dias]
+    )
+
+    return [
+        {"label": f"D-{i+1}", "valor": round(float(iv), 2)}
+        for i, iv in enumerate(registros)
+        if iv is not None
+    ]

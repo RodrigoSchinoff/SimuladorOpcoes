@@ -91,20 +91,84 @@
             font-size: 13px;
             background: #f8fafc;
             border-left: 5px solid #cbd5e1;
+            position: relative;
         }
 
         .iv-caro   { border-left-color: #dc2626; }
         .iv-justo  { border-left-color: #f59e0b; }
         .iv-barato { border-left-color: #16a34a; }
 
-        .iv-titulo {
+        /* === TEXTO DA CLASSIFICAÇÃO === */
+        .iv-label {
             font-weight: 600;
-            margin-bottom: 4px;
         }
 
-        .iv-motivo {
+        .iv-label-barato {
+            color: #16a34a;
+        }
+
+        .iv-label-justo {
+            color: #f59e0b;
+        }
+
+        .iv-label-caro {
+            color: #dc2626;
+        }
+
+        .iv-icon {
+            margin-left: 4px;
+            font-weight: 600;
+        }
+
+        @media (max-width: 640px) {
+            .iv-icon {
+                display: none;
+            }
+        }
+
+
+
+        .iv-titulo {
+            font-weight: 600;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .iv-dados {
             font-size: 12px;
             color: #374151;
+            line-height: 1.4;
+        }
+
+        .iv-info {
+            cursor: pointer;
+            font-weight: 600;
+            position: relative;
+        }
+
+        .iv-tooltip {
+            display: none;
+            position: absolute;
+            top: 18px;
+            left: 0;
+            background: #111;
+            color: #fff;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            z-index: 100;
+            min-width: 140px;
+        }
+
+        .iv-tooltip ul {
+            padding-left: 14px;
+            margin: 6px 0 0 0;
+        }
+
+        .iv-info:hover .iv-tooltip {
+            display: block;
         }
 
         .form-row {
@@ -201,139 +265,154 @@
 <div class="page">
 
 <div class="page-title">Long Straddle — Screener ATM</div>
-<div class="page-subtitle">
-
-</div>
+<div class="page-subtitle"></div>
 
 <div class="card">
 
-    {% if iv_decisao %}
-    <div class="iv-box
-        {% if iv_decisao.classificacao == 'CARO' %}iv-caro
-        {% elif iv_decisao.classificacao == 'BARATO' %}iv-barato
-        {% else %}iv-justo{% endif %}">
+{% if iv_decisao %}
+<div class="iv-box
+    {% if iv_decisao.classificacao == 'CARO' %}iv-caro
+    {% elif iv_decisao.classificacao == 'BARATO' %}iv-barato
+    {% else %}iv-justo{% endif %}">
 
-        <div class="iv-titulo">
-            Volatilidade Implícita: {{ iv_decisao.classificacao }}
-            <span title="
-IV atual: {{ iv_decisao.iv_atual_pct|floatformat:2 }}%
+    <div class="iv-titulo">
+        Volatilidade Implícita —
+        <span class="iv-label {% if iv_decisao.classificacao|upper == 'BARATO' %}iv-label-barato{% elif iv_decisao.classificacao|upper == 'CARO' %}iv-label-caro{% else %}iv-label-justo{% endif %}">
+            {{ iv_decisao.classificacao|upper }}
+            <span class="iv-icon">
+                {% if iv_decisao.classificacao|upper == 'BARATO' %}↓
+                {% elif iv_decisao.classificacao|upper == 'CARO' %}↑
+                {% else %}—
+                {% endif %}
+            </span>
+        </span>
 
-Referências históricas (últimos {{ iv_decisao.janela }} pregões):
-Baixa (25%): {{ iv_decisao.iv_baixa_pct|floatformat:2 }}%
-Normal (mediana): {{ iv_decisao.iv_normal_pct|floatformat:2 }}%
-Alta (25%): {{ iv_decisao.iv_alta_pct|floatformat:2 }}%
-            ">ⓘ</span>
+
+
+        {% if iv_dias %}
+        <span class="iv-info">ⓘ
+            <div class="iv-tooltip">
+                <strong>IV últimos dias</strong>
+                <ul>
+                    {% for iv in iv_dias %}
+                        <li>{{ iv.label }}: {{ iv.valor }}%</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </span>
+        {% endif %}
+    </div>
+
+    <div class="iv-dados">
+        IV Atual: <strong>{{ iv_decisao.iv_atual_pct|floatformat:2 }}%</strong><br>
+        IV Histórica ({{ iv_decisao.janela }}d): {{ iv_decisao.iv_normal_pct|floatformat:2 }}%
+    </div>
+</div>
+{% endif %}
+
+{% if erro %}
+<div class="erro">{{ erro }}</div>
+{% endif %}
+
+<form method="get" id="screener_form">
+    <div id="status_msg" class="aviso"></div>
+
+    <div class="form-row">
+        <div>
+            <label>Ativo</label>
+            <input type="text" name="ativo" value="{{ ativo }}" placeholder="Ex.: PETR4">
         </div>
 
-        <div class="iv-motivo">
-            {{ iv_decisao.motivo }}
+        <div>
+            <label>Lote Total</label>
+            <input type="number" name="lote_total" value="{{ lote_total }}">
+        </div>
+
+        <div>
+            <label>Horizonte</label>
+            <select name="horizonte" id="id_horizonte">
+                <option value="D+1" selected>D+1</option>
+            </select>
+        </div>
+
+        <div>
+            <label>Crush IV (%)</label>
+            <input type="number" step="0.1" id="id_crush_iv" name="crush_iv" value="{{ crush_iv }}">
+        </div>
+
+        <div>
+            <label>IV Manual (%)</label>
+            <input type="number" step="0.1" name="iv_override" value="{{ request.GET.iv_override }}">
+        </div>
+
+        <div>
+            <label>Nº Vencimentos</label>
+            <select name="num_vencimentos">
+                <option value="1" {% if num_vencimentos == "1" %}selected{% endif %}>Atual</option>
+                <option value="2" {% if num_vencimentos == "2" %}selected{% endif %}>Atual + Próximo</option>
+            </select>
+        </div>
+
+        <div>
+            <label>BE Max (%)</label>
+            <input type="number" step="0.01" name="be_max_pct"
+                   value="{% if be_max_pct is not None %}{{ be_max_pct }}{% endif %}">
+        </div>
+
+        <div>
+            <button class="btn" type="submit" id="btn_rodar">Rodar Screener</button>
         </div>
     </div>
-    {% endif %}
-
-    {% if erro %}
-        <div class="erro">{{ erro }}</div>
-    {% endif %}
-
-    <form method="get" id="screener_form">
-        <div id="status_msg" class="aviso"></div>
-
-        <div class="form-row">
-            <div>
-                <label>Ativo</label>
-                <input type="text" name="ativo" value="{{ ativo }}" placeholder="Ex.: PETR4">
-            </div>
-
-            <div>
-                <label>Lote Total</label>
-                <input type="number" name="lote_total" value="{{ lote_total }}">
-            </div>
-
-            <div>
-                <label>Horizonte</label>
-                <select name="horizonte" id="id_horizonte">
-                    <option value="D+1" selected>D+1</option>
-                </select>
-            </div>
-
-            <div>
-                <label>Crush IV (%)</label>
-                <input type="number" step="0.1" id="id_crush_iv" name="crush_iv" value="{{ crush_iv }}">
-            </div>
-
-            <div>
-                <label>IV Manual (%)</label>
-                <input type="number" step="0.1" name="iv_override" value="{{ request.GET.iv_override }}" placeholder="Ex.: 35">
-            </div>
-
-            <div>
-                <label>Nº Vencimentos</label>
-                <select name="num_vencimentos">
-                    <option value="1" {% if num_vencimentos == "1" %}selected{% endif %}>Atual</option>
-                    <option value="2" {% if num_vencimentos == "2" %}selected{% endif %}>Atual + Próximo</option>
-                </select>
-            </div>
-
-            <div>
-                <label>BE Max (%)</label>
-                <input type="number" step="0.01" name="be_max_pct"
-                       value="{% if be_max_pct is not None %}{{ be_max_pct }}{% endif %}">
-            </div>
-
-            <div>
-                <button class="btn" type="submit" id="btn_rodar">Rodar Screener</button>
-            </div>
-        </div>
-    </form>
+</form>
 </div>
 
 {% if linhas_screener %}
 <div class="card">
 <table>
-    <thead>
-    <tr>
-        <th class="left">CALL</th>
-        <th class="left">PUT</th>
-        <th>Strike</th>
-        <th>%BE↓</th>
-        <th>BE↓</th>
-        <th>%BE↑</th>
-        <th>BE↑</th>
-        <th>Spot</th>
-        <th>Prêmio Total</th>
-        <th>Prêmio CALL</th>
-        <th>Δ CALL</th>
-        <th>Prêmio PUT</th>
-        <th>Δ PUT</th>
-        <th>Vencimento</th>
-        <th>Lote CALL</th>
-        <th>Lote PUT</th>
-        <th>Custo Operação</th>
-    </tr>
-    </thead>
-    <tbody>
-    {% for r in linhas_screener %}
-    <tr>
-        <td class="left">{{ r.call }}</td>
-        <td class="left">{{ r.put }}</td>
-        <td>{{ r.strike|floatformat:2 }}</td>
-        <td>{{ r.be_pct_down|floatformat:2 }}</td>
-        <td>{{ r.be_down|floatformat:2 }}</td>
-        <td>{{ r.be_pct_up|floatformat:2 }}</td>
-        <td>{{ r.be_up|floatformat:2 }}</td>
-        <td>{{ r.spot|floatformat:2 }}</td>
-        <td>{{ r.premium_total|floatformat:4 }}</td>
-        <td>{{ r.call_premio|floatformat:4 }}</td>
-        <td>{{ r.call_delta|floatformat:4 }}</td>
-        <td>{{ r.put_premio|floatformat:4 }}</td>
-        <td>{{ r.put_delta|floatformat:4 }}</td>
-        <td>{{ r.due_date }}</td>
-        <td>{{ r.qty_call }}</td>
-        <td>{{ r.qty_put }}</td>
-        <td>R$ {{ r.custo_operacao }}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
+<thead>
+<tr>
+    <th class="left">CALL</th>
+    <th class="left">PUT</th>
+    <th>Strike</th>
+    <th>%BE↓</th>
+    <th>BE↓</th>
+    <th>%BE↑</th>
+    <th>BE↑</th>
+    <th>Spot</th>
+    <th>Prêmio Total</th>
+    <th>Prêmio CALL</th>
+    <th>Δ CALL</th>
+    <th>Prêmio PUT</th>
+    <th>Δ PUT</th>
+    <th>Vencimento</th>
+    <th>Lote CALL</th>
+    <th>Lote PUT</th>
+    <th>Custo Operação</th>
+</tr>
+</thead>
+<tbody>
+{% for r in linhas_screener %}
+<tr>
+    <td class="left">{{ r.call }}</td>
+    <td class="left">{{ r.put }}</td>
+    <td>{{ r.strike|floatformat:2 }}</td>
+    <td>{{ r.be_pct_down|floatformat:2 }}</td>
+    <td>{{ r.be_down|floatformat:2 }}</td>
+    <td>{{ r.be_pct_up|floatformat:2 }}</td>
+    <td>{{ r.be_up|floatformat:2 }}</td>
+    <td>{{ r.spot|floatformat:2 }}</td>
+    <td>{{ r.premium_total|floatformat:4 }}</td>
+    <td>{{ r.call_premio|floatformat:4 }}</td>
+    <td>{{ r.call_delta|floatformat:4 }}</td>
+    <td>{{ r.put_premio|floatformat:4 }}</td>
+    <td>{{ r.put_delta|floatformat:4 }}</td>
+    <td>{{ r.due_date }}</td>
+    <td>{{ r.qty_call }}</td>
+    <td>{{ r.qty_put }}</td>
+    <td>R$ {{ r.custo_operacao }}</td>
+</tr>
+{% endfor %}
+</tbody>
 </table>
 </div>
 {% endif %}

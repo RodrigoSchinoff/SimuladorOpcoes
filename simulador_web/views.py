@@ -15,6 +15,10 @@ from django.utils import timezone
 from django.http import JsonResponse
 from simulador_web.models import Lead
 from simulador_web.domain.iv_atm_decision import build_iv_decisao
+from simulador_web.domain.iv_atm_metrics import get_iv_ultimos_dias
+from simulador_web.models import IvAtmHistorico
+
+
 
 import json
 
@@ -641,6 +645,22 @@ async def long_straddle(request):
         )
     else:
         contexto["iv_decisao"] = None
+
+    # ---------------------------------------------------------
+    # INJETAR IV ÚLTIMOS DIAS (D-1 até D-10) — FORA DO CACHE
+    # ---------------------------------------------------------
+    if user_plan == "pro" and ativo:
+
+        iv_dias = await sync_to_async(
+            lambda: get_iv_ultimos_dias(
+                IvAtmHistorico.objects.filter(ticker=ativo),
+                dias=10
+            )
+        )()
+
+        contexto["iv_dias"] = iv_dias
+    else:
+        contexto["iv_dias"] = []
 
     # ---------------------------------------------------------
     # SALVAR RESULTADO FINAL NO CACHE
