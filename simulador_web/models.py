@@ -139,21 +139,34 @@ class IvAtmHistorico(models.Model):
 
 
 class EarningsDate(models.Model):
+    ANNOUNCEMENT_CHOICES = (
+        ("ANTES", "Antes do pregão"),
+        ("DEPOIS", "Depois do pregão"),
+    )
+
+    SOURCE_CHOICES = (
+        ("MANUAL", "Manual"),
+        ("API", "API"),
+    )
+
     ticker = models.CharField(max_length=20)
     earnings_date = models.DateField()
-    announcement_time = models.CharField(max_length=20)
-    source = models.CharField(max_length=50, blank=True)
+
+    announcement_time = models.CharField(
+        max_length=10,
+        choices=ANNOUNCEMENT_CHOICES,
+        null=True,
+        blank=True,
+    )
+
+    source = models.CharField(
+        max_length=20,
+        choices=SOURCE_CHOICES,
+        default="Manual",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        unique_together = ("ticker", "earnings_date")
-        indexes = [
-            models.Index(fields=["ticker", "earnings_date"]),
-        ]
-
     def __str__(self):
-        return f"{self.ticker} - {self.earnings_date} ({self.announcement_time})"
+        return f"{self.ticker} - {self.earnings_date}"
 
-
-    def __str__(self):
-        return f"{self.ticker} - {self.earnings_date} ({self.announcement_time})"

@@ -29,3 +29,19 @@ def get_iv_atm_historico_por_pregoes(
         }
         for r in registros
     ]
+
+
+
+def get_iv_atm_por_data(ticker: str, trade_date):
+    """
+    Retorna iv_atm_mean para um ticker e data exata.
+    Sem fallback. Sem lógica adicional.
+    """
+    try:
+        r = IvAtmHistorico.objects.get(
+            ticker=ticker.upper(),
+            trade_date=trade_date
+        )
+        return r.iv_atm_mean
+    except IvAtmHistorico.DoesNotExist:
+        return None

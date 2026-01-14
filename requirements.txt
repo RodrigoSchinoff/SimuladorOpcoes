@@ -23,3 +23,6 @@ matplotlib>=3.8,<4
 
 # Variáveis de ambiente
 python-dotenv
+
+whitenoise>=6.0
+

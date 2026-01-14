@@ -18,6 +18,9 @@ from simulador_web.domain.iv_atm_decision import build_iv_decisao
 from simulador_web.domain.iv_atm_metrics import get_iv_ultimos_dias
 from simulador_web.models import IvAtmHistorico
 from simulador_web.models import IvAtmHistorico, EarningsDate
+from datetime import timedelta
+from simulador_web.repositories.iv_atm_repository import get_iv_atm_por_data
+
 
 import json
 import asyncio
@@ -671,7 +674,23 @@ async def long_straddle(request):
     contexto["earnings_last"] = earnings_last
     contexto["earnings_next"] = earnings_next
 
+    # ---------------------------------------------------------
+    # IV NO ÚLTIMO EARNINGS (D-1 / D0 / D+1) — FORA DO CACHE
+    # ---------------------------------------------------------
+    iv_earnings = None
 
+    if user_plan == "pro" and ativo and earnings_last:
+        d0 = earnings_last.earnings_date
+        d1 = d0 - timedelta(days=1)
+        p1 = d0 + timedelta(days=1)
+
+        iv_earnings = {
+            "d1": await sync_to_async(get_iv_atm_por_data)(ativo, d1),
+            "d0": await sync_to_async(get_iv_atm_por_data)(ativo, d0),
+            "p1": await sync_to_async(get_iv_atm_por_data)(ativo, p1),
+        }
+
+    contexto["iv_earnings"] = iv_earnings
 
     # ---------------------------------------------------------
     # INJETAR IV ÚLTIMOS DIAS (D-1 até D-10) — FORA DO CACHE

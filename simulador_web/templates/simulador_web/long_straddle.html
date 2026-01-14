@@ -320,7 +320,29 @@
             {% if earnings_last %}
                 📅 Último resultado:
                 <strong>{{ earnings_last.earnings_date|date:"d/m/Y" }}</strong>
-                ({{ earnings_last.announcement_time }})<br>
+                ({{ earnings_last.announcement_time }})
+
+                {% if iv_earnings %}
+                <span class="iv-info">ⓘ
+                    <div class="iv-tooltip">
+                        <strong>IV no último resultado (ATM)</strong><br>
+                        D-1:
+                        {% if iv_earnings.d1 is not None %}
+                            {{ iv_earnings.d1|floatformat:2 }}%
+                        {% else %}—{% endif %}<br>
+                        D0:
+                        {% if iv_earnings.d0 is not None %}
+                            {{ iv_earnings.d0|floatformat:2 }}%
+                        {% else %}—{% endif %}<br>
+                        D+1:
+                        {% if iv_earnings.p1 is not None %}
+                            {{ iv_earnings.p1|floatformat:2 }}%
+                        {% else %}—{% endif %}
+                    </div>
+                </span>
+                {% endif %}
+                <br>
+
             {% endif %}
 
             {% if earnings_next %}
