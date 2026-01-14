@@ -136,3 +136,24 @@ class IvAtmHistorico(models.Model):
 
     def __str__(self):
         return f"{self.ticker} - {self.trade_date}"
+
+
+class EarningsDate(models.Model):
+    ticker = models.CharField(max_length=20)
+    earnings_date = models.DateField()
+    announcement_time = models.CharField(max_length=20)
+    source = models.CharField(max_length=50, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("ticker", "earnings_date")
+        indexes = [
+            models.Index(fields=["ticker", "earnings_date"]),
+        ]
+
+    def __str__(self):
+        return f"{self.ticker} - {self.earnings_date} ({self.announcement_time})"
+
+
+    def __str__(self):
+        return f"{self.ticker} - {self.earnings_date} ({self.announcement_time})"

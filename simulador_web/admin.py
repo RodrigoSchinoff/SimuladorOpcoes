@@ -6,6 +6,7 @@ from django.utils import timezone
 from .models import Subscription, Role
 from .models import PlanAssetList
 from .models import Lead
+from .models import EarningsDate
 
 User = get_user_model()
 
@@ -62,6 +63,23 @@ class LeadAdmin(admin.ModelAdmin):
         "created_at",
     )
 
+    readonly_fields = ("created_at",)
+
+
+@admin.register(EarningsDate)
+class EarningsDateAdmin(admin.ModelAdmin):
+    list_display = (
+        "ticker",
+        "earnings_date",
+        "announcement_time",
+        "source",
+        "created_at",
+    )
+
+    list_filter = ("ticker", "announcement_time", "earnings_date")
+    search_fields = ("ticker", "source", "announcement_time")
+
+    ordering = ("-earnings_date",)
     readonly_fields = ("created_at",)
 
 
