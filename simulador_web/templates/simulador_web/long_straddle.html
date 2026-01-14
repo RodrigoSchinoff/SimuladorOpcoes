@@ -303,12 +303,40 @@
         {% endif %}
     </div>
 
-    <div class="iv-dados">
-        IV Atual: <strong>{{ iv_decisao.iv_atual_pct|floatformat:2 }}%</strong><br>
-        IV Histórica ({{ iv_decisao.janela }}d): {{ iv_decisao.iv_normal_pct|floatformat:2 }}%
+    <div class="iv-dados"
+        style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; align-items:center;">
+
+        <!-- COLUNA ESQUERDA: IV -->
+        <div>
+            IV Atual:
+            <strong>{{ iv_decisao.iv_atual_pct|floatformat:2 }}%</strong><br>
+            IV Histórica ({{ iv_decisao.janela }}d):
+            {{ iv_decisao.iv_normal_pct|floatformat:2 }}%
+        </div>
+
+        <!-- COLUNA DIREITA: RESULTADOS -->
+        {% if earnings_last or earnings_next %}
+        <div>
+            {% if earnings_last %}
+                📅 Último resultado:
+                <strong>{{ earnings_last.earnings_date|date:"d/m/Y" }}</strong>
+                ({{ earnings_last.announcement_time }})<br>
+            {% endif %}
+
+            {% if earnings_next %}
+                📅 Próximo resultado:
+                <strong>{{ earnings_next.earnings_date|date:"d/m/Y" }}</strong>
+                ({{ earnings_next.announcement_time }})
+            {% endif %}
+        </div>
+        {% endif %}
+
     </div>
+
+
 </div>
 {% endif %}
+
 
 {% if erro %}
 <div class="erro">{{ erro }}</div>

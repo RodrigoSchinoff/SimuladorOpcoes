@@ -17,11 +17,9 @@ from simulador_web.models import Lead
 from simulador_web.domain.iv_atm_decision import build_iv_decisao
 from simulador_web.domain.iv_atm_metrics import get_iv_ultimos_dias
 from simulador_web.models import IvAtmHistorico
-
-
+from simulador_web.models import IvAtmHistorico, EarningsDate
 
 import json
-
 import asyncio
 
 from .utils import subscription_required
@@ -645,6 +643,35 @@ async def long_straddle(request):
         )
     else:
         contexto["iv_decisao"] = None
+
+
+    # ---------------------------------------------------------
+    # INJETAR EARNINGS (ÚLTIMO / PRÓXIMO) — FORA DO CACHE
+    # ---------------------------------------------------------
+    earnings_last = None
+    earnings_next = None
+
+    if ativo:
+        hoje = timezone.localdate()
+
+        earnings_last = await sync_to_async(
+            lambda: EarningsDate.objects
+            .filter(ticker=ativo, earnings_date__lte=hoje)
+            .order_by("-earnings_date")
+            .first()
+        )()
+
+        earnings_next = await sync_to_async(
+            lambda: EarningsDate.objects
+            .filter(ticker=ativo, earnings_date__gte=hoje)
+            .order_by("earnings_date")
+            .first()
+        )()
+
+    contexto["earnings_last"] = earnings_last
+    contexto["earnings_next"] = earnings_next
+
+
 
     # ---------------------------------------------------------
     # INJETAR IV ÚLTIMOS DIAS (D-1 até D-10) — FORA DO CACHE
