@@ -685,9 +685,9 @@ async def long_straddle(request):
         p1 = d0 + timedelta(days=1)
 
         iv_earnings = {
-            "d1": await sync_to_async(get_iv_atm_por_data)(ativo, d1),
-            "d0": await sync_to_async(get_iv_atm_por_data)(ativo, d0),
-            "p1": await sync_to_async(get_iv_atm_por_data)(ativo, p1),
+            "d1": await sync_to_async(get_iv_atm_por_data)(ativo, d0, "ANTERIOR"),
+            "d0": await sync_to_async(get_iv_atm_por_data)(ativo, d0, "EXATA"),
+            "p1": await sync_to_async(get_iv_atm_por_data)(ativo, d0, "POSTERIOR"),
         }
 
     contexto["iv_earnings"] = iv_earnings
