@@ -2,10 +2,9 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Algop — Avaliação objetiva de oportunidades em opções</title>
-<meta name="description" content="Algop é uma plataforma SaaS para avaliação objetiva de oportunidades em opções, com análise de risco, break-even e cenários.">
+<title>Algop — Decisão objetiva em operações com opções</title>
+<meta name="description" content="Algop é uma plataforma SaaS para análise objetiva de operações com opções, abstraindo a complexidade do mercado e entregando critérios claros de decisão.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 
 <style>
 :root{
@@ -35,19 +34,6 @@ body{
   color:var(--text);
 }
 
-/* ALERT */
-.alert{
-  max-width:1100px;
-  margin:140px auto -80px;
-  padding:18px 24px;
-  border-radius:12px;
-  background:rgba(220,38,38,.12);
-  border:1px solid rgba(220,38,38,.35);
-  color:#fecaca;
-  font-weight:500;
-  text-align:center;
-}
-
 /* HEADER */
 header{
   position:fixed;
@@ -67,7 +53,6 @@ header h1{
   font-size:22px;
   font-weight:700;
 }
-header h1 span{color:var(--primary)}
 
 header a{
   text-decoration:none;
@@ -199,7 +184,6 @@ footer{
 
 <header>
   <h1>Algop</h1>
-
   <div style="display:flex; gap:12px;">
     <a href="/app/planos/">Planos</a>
     <a href="/accounts/login/?next=/app/ls/">Login</a>
@@ -209,29 +193,30 @@ footer{
 <div class="hero">
   <div class="hero-grid">
     <div>
-      <h2>Avaliação objetiva de oportunidades em opções</h2>
+      <h2>Decisão objetiva em operações com opções</h2>
 
       <p>
-        O Algop abstrai a complexidade do mercado de opções. Avalia inúmeros ativos e centenas de possibilidades,
-        organiza risco e preço, e identifica as oportunidades. Você não recebe inúmeras possibilidades para avaliar.
-        Recebe critérios objetivos: custo, break-even, risco e cenários.
+        O Algop transforma dados complexos do mercado de opções em critérios claros de decisão.
+        Avalia simultaneamente múltiplos ativos e estruturas, organiza custo, risco e break-even,
+        e entrega ao usuário uma visão objetiva sobre onde estão as oportunidades mais eficientes.
+        Em vez de inúmeras possibilidades, o Algop apresenta decisões comparáveis e priorizadas.
       </p>
 
       <div class="hero-actions">
         <a href="/accounts/login/?next=/app/ls/" class="btn-primary">Entrar</a>
-        <a href="#" class="btn-secondary">Como funciona</a>
+        <a href="#como-funciona" class="btn-secondary">Como funciona</a>
       </div>
     </div>
 
     <div class="card">
       <h4>Por que usar o Algop?</h4>
       <ul>
-        <li>✔ Abstração completa da complexidade operacional</li>
-        <li>✔ Avaliações objetivas de estruturas ATM</li>
-        <li>✔ Break-even tratado como variável de decisão</li>
-        <li>✔ Risco analisado em termos reais</li>
-        <li>✔ Avaliação até o vencimento e D+1</li>
-        <li>✔ Oportunidades reais em segundos</li>
+        <li>✔ Análise sistemática de estruturas ATM reais</li>
+        <li>✔ Classificação objetiva de Long Straddle (Caro, Justo ou Barato)</li>
+        <li>✔ Break-even tratado como critério central de eficiência</li>
+        <li>✔ Risco analisado de forma prática e comparável</li>
+        <li>✔ Avaliação focada em D+1, simulando o encurtamento de um dia até o vencimento</li>
+        <li>✔ Priorização de oportunidades em poucos segundos</li>
       </ul>
     </div>
   </div>
@@ -240,63 +225,121 @@ footer{
 <section>
   <h3>Identificação automática de oportunidades</h3>
   <p class="lead">
-    Volatilidade, balanços, resultados trimestrais e eventos inesperados criam cenários difíceis de analisar manualmente.
-    O Algop foi desenvolvido exatamente para esse ambiente.
+    Volatilidade implícita, múltiplos strikes, diferentes vencimentos e eventos corporativos
+    criam um ambiente complexo, difícil de analisar manualmente de forma consistente.
+    O Algop foi desenvolvido para eliminar essa complexidade, processando automaticamente
+    os cenários relevantes e entregando informações prontas para decisão.
   </p>
 
   <div class="grid">
     <div class="card">
       <h4>Análise em escala</h4>
       <p>
-        O sistema avalia múltiplos ativos, strikes e vencimentos de forma automática,
-        reduzindo milhares de possibilidades a poucas oportunidades relevantes.
+        O Algop analisa simultaneamente um conjunto de ativos líquidos e constrói
+        estruturas de Long Straddle ATM, comparando custo e break-even.
+        O resultado é um ranking objetivo de oportunidades ordenadas pela eficiência da estrutura.
       </p>
     </div>
 
     <div class="card">
       <h4>Avaliações preparadas para o movimento</h4>
       <p>
-        No módulo Algop | Long Straddle, o sistema identifica estruturas preparadas para cenários de movimento
-        e apresenta risco, custo e break-even de forma objetiva, antes da execução.
+        No módulo Algop | Long Straddle, cada estrutura é avaliada antes da execução,
+        com apresentação clara de custo, break-even e risco.
+        O objetivo não é simular cenários extremos, mas avaliar a eficiência real da operação.
       </p>
     </div>
 
     <div class="card">
       <h4>Volatilidade no contexto certo</h4>
       <p>
-        O Algop analisa a volatilidade implícita no contexto histórico e classifica o preço do risco como
-        <strong>barato, justo ou caro</strong>, ajudando a entender se o mercado está pagando ou cobrando demais
-        pelo movimento.
+        O Algop compara a volatilidade implícita atual com a média histórica dos últimos
+        60 pregões e classifica o Long Straddle como <strong>Barato, Justo ou Caro</strong>.
+        Informações adicionais mostram o comportamento recente da IV e o impacto real
+        de balanços anteriores (D-1, D0 e D+1).
       </p>
     </div>
   </div>
 </section>
 
 <section>
-  <h3>O Algop organiza a complexidade do mercado de opções e entrega informações prontas para decisão.</h3>
+  <h3>
+    O Algop organiza dados complexos do mercado de opções e transforma múltiplos cenários possíveis
+    em critérios claros e comparáveis de decisão.
+  </h3>
   <p class="lead">
-    O Algop abstrai a complexidade do mercado de opções e apresenta apenas o que é relevante para a decisão:
-    risco, custo, break-even e cenários consistentes — sem ruído, sem excesso.
+    Desenvolvido para abstrair a complexidade do mercado de opções, o Algop permite que
+    o usuário foque na decisão, não na montagem ou comparação manual de cenários.
+    Simples no uso e rigoroso na metodologia, pode ser utilizado por qualquer nível de trader,
+    atendendo também às exigências de usuários mais experientes.
   </p>
 
   <div class="grid">
     <div class="card">
       <h4>Menos complexidade</h4>
-      <p>Os algoritmos cuidam da análise pesada, permitindo foco total na decisão.</p>
+      <p>Os algoritmos cuidam da análise pesada, eliminando etapas manuais e repetitivas.</p>
     </div>
     <div class="card">
       <h4>Mais objetividade</h4>
       <p>Compare oportunidades com base em critérios claros e consistentes, não em percepção subjetiva.</p>
     </div>
     <div class="card">
-      <h4>Consistência no longo prazo</h4>
-      <p>Use o Algop como apoio para construir método, disciplina e consistência ao operar opções.</p>
+      <h4>Consistência no processo</h4>
+      <p>Use o Algop como apoio para construir método, disciplina e decisões mais estruturadas.</p>
     </div>
   </div>
 </section>
 
+<section id="como-funciona">
+  <h3>Como o Algop funciona</h3>
+  <p class="lead">
+    O Algop foi desenvolvido para transformar dados complexos do mercado de opções
+    em critérios claros de decisão, por meio de um processo objetivo e baseado em regras bem definidas.
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <h4>1. Dados reais de opções ATM</h4>
+      <p>
+        O sistema trabalha com opções ATM reais, considerando calls e puts
+        para refletir o preço efetivo do risco.
+      </p>
+    </div>
+
+    <div class="card">
+      <h4>2. Histórico próprio de volatilidade</h4>
+      <p>
+        A volatilidade implícita é armazenada e analisada ao longo do tempo,
+        permitindo comparações objetivas.
+      </p>
+    </div>
+
+    <div class="card">
+      <h4>3. Contexto de eventos corporativos</h4>
+      <p>
+        Datas de resultados e o comportamento da IV em balanços anteriores
+        (D-1, D0 e D+1) são incorporados à análise.
+      </p>
+    </div>
+
+    <div class="card">
+      <h4>4. Classificação e priorização das oportunidades</h4>
+      <p>
+        A partir dos dados analisados, o Algop avalia estruturas de Long Straddle,
+        classifica o preço do risco e organiza as oportunidades em rankings objetivos,
+        considerando critérios como custo, break-even e eficiência da estrutura.
+      </p>
+    </div>
+  </div>
+
+  <p class="lead" style="margin-top:60px;">
+    O resultado não é uma recomendação, mas uma avaliação técnica que permite
+    comparar oportunidades com critérios claros e consistentes.
+  </p>
+</section>
+
 <footer>
-© 2026 Algop — Sistema de avaliação objetiva de oportunidades em opções.
+© 2026 Algop — Sistema de análise objetiva e apoio à decisão em operações com opções.
 </footer>
 
 </body>

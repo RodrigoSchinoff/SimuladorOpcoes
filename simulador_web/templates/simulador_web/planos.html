@@ -145,29 +145,31 @@ footer{
 <body>
 
 <header>
-  <h1>Algop<span></span></h1>
+  <h1>Algop</h1>
   <a href="/">Voltar</a>
 </header>
 
 <main>
-<h2>Escolha seu plano</h2>
-<p class="lead">Informe seus dados e entraremos em contato para finalizar a contratação.</p>
+<h2>Planos de acesso ao Algop</h2>
+<p class="lead">
+  Escolha o nível de acesso mais adequado e entraremos em contato para finalizar a contratação.
+</p>
 
 <div class="plans">
 
-<!-- TRIAL -->
+<!-- BÁSICO (internamente continua trial) -->
 <div class="plan-card">
   <div>
-    <h3>Trial</h3>
-    <p>Ideal para conhecer a ferramenta.</p>
+    <h3>Básico</h3>
+    <p>Ideal para conhecer a metodologia e a forma de análise do Algop.</p>
     <ul>
-      <li>Acesso limitado</li>
-      <li>Screener Long Straddle</li>
-      <li>Simulação até vencimento</li>
+      <li>Acesso limitado à plataforma</li>
+      <li>Screener de Long Straddle</li>
+      <li>Avaliação focada em D+1</li>
     </ul>
   </div>
 
-  <button class="btn-primary" onclick="toggleForm('trial')">Contratar plano</button>
+  <button class="btn-primary" onclick="toggleForm('trial')">Solicitar acesso</button>
 
   <div class="form-box" id="form-trial">
     <form onsubmit="return validarCPF(this)">
@@ -177,7 +179,7 @@ footer{
       <input name="whatsapp" placeholder="WhatsApp" required>
       <input name="cpf" placeholder="CPF" required>
       <div class="error">CPF inválido.</div>
-      <button class="btn-primary" type="submit">Enviar interesse</button>
+      <button class="btn-primary" type="submit">Enviar solicitação</button>
     </form>
   </div>
 
@@ -190,16 +192,21 @@ footer{
 <div class="plan-card">
   <div>
     <h3>Pro</h3>
-    <p>Uso profissional com acesso completo.</p>
+    <p>Para uso contínuo, com acesso completo aos critérios e análises do Algop.</p>
     <ul>
-      <li>Todos os ativos liberados</li>
-      <li>Screener completo</li>
-      <li>D+1 com Crush IV</li>
-      <li>Histórico da IV</li>
+      <li>Acesso completo a todos os ativos</li>
+      <li>Screener e ranking de Long Straddle</li>
+      <li>Classificação objetiva do LS (Barato, Justo ou Caro)</li>
+      <li>Avaliação D+1 com impacto de Crush de Volatilidade</li>
+      <li>Histórico próprio de volatilidade implícita</li>
+      <li>Histórico de resultados com comportamento da IV em D-1, D0 e D+1</li>
     </ul>
+    <p style="color:#9ca3af;font-size:14px;">
+      Indicado para quem utiliza o Algop como ferramenta recorrente de análise e tomada de decisão.
+    </p>
   </div>
 
-  <button class="btn-primary" onclick="toggleForm('pro')">Contratar plano</button>
+  <button class="btn-primary" onclick="toggleForm('pro')">Solicitar contato</button>
 
   <div class="form-box" id="form-pro">
     <form onsubmit="return validarCPF(this)">
@@ -209,7 +216,7 @@ footer{
       <input name="whatsapp" placeholder="WhatsApp" required>
       <input name="cpf" placeholder="CPF" required>
       <div class="error">CPF inválido.</div>
-      <button class="btn-primary" type="submit">Enviar interesse</button>
+      <button class="btn-primary" type="submit">Enviar solicitação</button>
     </form>
   </div>
 
@@ -221,7 +228,10 @@ footer{
 </div>
 </main>
 
-<footer>© 2026 Algop — Sistema de avaliação objetiva de oportunidades em opções.</footer>
+<footer>
+© 2026 Algop — Sistema de análise objetiva e apoio à decisão em operações com opções.<br>
+O Algop não executa operações nem fornece recomendações de investimento.
+</footer>
 
 <script>
 function toggleForm(plano){
@@ -261,7 +271,6 @@ function validarCPF(form){
   if(resto===10||resto===11) resto=0;
   if(resto!==parseInt(cpf[10])){ error.style.display="block"; return false; }
 
-  // Envio para backend (sem reload)
   const payload = {
     plano: (form.querySelector("input[name='plano']")?.value || "").trim(),
     nome: (form.querySelector("input[name='nome']")?.value || "").trim(),
@@ -278,10 +287,8 @@ function validarCPF(form){
     },
     body: JSON.stringify(payload)
   })
-  .then(async (resp) => {
-    if (!resp.ok) {
-      throw new Error("Falha ao enviar solicitação.");
-    }
+  .then((resp) => {
+    if (!resp.ok) throw new Error();
     form.style.display="none";
     success.style.display="block";
   })
