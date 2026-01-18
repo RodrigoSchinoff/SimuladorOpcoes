@@ -135,19 +135,22 @@ LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 
 # --------------------------------------------------
-# Email
+# Email — Zoho Mail (PRODUÇÃO)
 # --------------------------------------------------
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.resend.com"
+
+EMAIL_HOST = "smtp.zoho.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "resend"
-EMAIL_HOST_PASSWORD = os.getenv("RESEND_API_KEY")
-DEFAULT_FROM_EMAIL = "StraddlePro <onboarding@resend.dev>"
+
+EMAIL_HOST_USER = "contato@algop.com.br"
+EMAIL_HOST_PASSWORD = os.getenv("ZOHO_EMAIL_PASSWORD")
+
+DEFAULT_FROM_EMAIL = "Algop <contato@algop.com.br>"
 
 # --------------------------------------------------
 # Sessão / Segurança
 # --------------------------------------------------
-SESSION_COOKIE_AGE = 60 * 60 * 2
+SESSION_COOKIE_AGE = 60 * 60 * 2  # 2 horas
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True

@@ -735,72 +735,75 @@ def sair(request):
     return redirect("landing")
 
 
+from django.conf import settings
+from django.core.mail import EmailMessage
+from django.views.decorators.csrf import csrf_exempt
+
+
+@csrf_exempt
 def planos(request):
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body.decode("utf-8"))
+    # GET → renderiza a página
+    if request.method == "GET":
+        return render(request, "simulador_web/planos.html")
 
-            plano = data.get("plano", "").strip()
-            if plano not in ("trial", "pro"):
-                return JsonResponse({"ok": False}, status=400)
+    if request.method != "POST":
+        return JsonResponse({"ok": False}, status=405)
 
-            nome = data.get("nome", "").strip()
-            email = data.get("email", "").strip()
-            whatsapp = data.get("whatsapp", "").strip()
-            cpf = data.get("cpf", "").strip()
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "JSON inválido"}, status=400)
 
-            # captura de IP (proxy-safe)
-            ip = request.META.get("HTTP_X_FORWARDED_FOR")
-            if ip:
-                ip = ip.split(",")[0].strip()
-            else:
-                ip = request.META.get("REMOTE_ADDR")
+    plano = (data.get("plano") or "").strip()
+    nome = (data.get("nome") or "").strip()
+    email = (data.get("email") or "").strip()
+    whatsapp = (data.get("whatsapp") or "").strip()
+    cpf = (data.get("cpf") or "").strip()
 
-            # 1) salva o lead (fonte da verdade)
-            Lead.objects.create(
-                nome=nome,
-                email=email,
-                whatsapp=whatsapp,
-                cpf=cpf,
-                plano_interesse=plano,
-                status="novo",
-                ip_origem=ip,
-            )
+    if plano not in ("trial", "pro"):
+        return JsonResponse({"ok": False, "error": "Plano inválido"}, status=400)
 
-            # 2) envia e-mail (não crítico)
-            resend_key = os.getenv("RESEND_API_KEY")
-            if resend_key:
-                try:
-                    import requests
+    if not all([nome, email, whatsapp, cpf]):
+        return JsonResponse({"ok": False, "error": "Dados incompletos"}, status=400)
 
-                    requests.post(
-                        "https://api.resend.com/emails",
-                        headers={
-                            "Authorization": f"Bearer {resend_key}",
-                            "Content-Type": "application/json",
-                        },
-                        json={
-                            "from": "StraddlePro <onboarding@resend.dev>",
-                            "to": ["rodrigo.scholiveira@gmail.com"],
-                            "subject": "Novo lead – StraddlePro",
-                            "text": (
-                                "Novo lead recebido:\n\n"
-                                f"Nome: {nome}\n"
-                                f"E-mail: {email}\n"
-                                f"WhatsApp: {whatsapp}\n"
-                                f"CPF: {cpf}\n"
-                                f"Plano: {plano}\n"
-                                f"IP: {ip}"
-                            ),
-                        },
-                        timeout=5,
-                    )
-                except Exception:
-                    pass  # e-mail nunca pode quebrar o fluxo
+    # IP (proxy-safe)
+    ip = request.META.get("HTTP_X_FORWARDED_FOR")
+    if ip:
+        ip = ip.split(",")[0].strip()
+    else:
+        ip = request.META.get("REMOTE_ADDR")
 
-            return JsonResponse({"ok": True})
+    # 1) salvar Lead
+    lead = Lead.objects.create(
+        nome=nome,
+        email=email,
+        whatsapp=whatsapp,
+        cpf=cpf,
+        plano_interesse=plano,
+        status="novo",
+        ip_origem=ip,
+    )
 
-        except Exception:
-            return JsonResponse({"ok": False}, status=400)
+    # 2) enviar e-mail (Zoho via Django)
+    try:
+        msg = EmailMessage(
+            subject=f"[Algop] Novo interesse — Plano {plano.upper()}",
+            body=(
+                "Novo interesse em plano Algop\n\n"
+                f"Plano: {plano}\n"
+                f"Nome: {nome}\n"
+                f"E-mail: {email}\n"
+                f"WhatsApp: {whatsapp}\n"
+                f"CPF: {cpf}\n"
+                f"IP: {ip}\n"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=["contato@algop.com.br"],
+            reply_to=[email],
+        )
+        msg.send(fail_silently=False)
+    except Exception:
+        # falha de e-mail NÃO impede o fluxo
+        pass
 
-    return render(request, "simulador_web/planos.html")
+    return JsonResponse({"ok": True})
