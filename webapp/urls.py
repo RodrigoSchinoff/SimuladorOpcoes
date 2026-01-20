@@ -3,6 +3,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.views.static import serve
 from simulador_web.views import landing
+from payments.webhooks import mercadopago_webhook
 
 urlpatterns = [
     # Landing
@@ -26,4 +27,7 @@ urlpatterns = [
             "path": "sitemap.xml",
         },
     ),
+
+    path("payments/", include("payments.urls")),
+    path("webhooks/mercado-pago/", mercadopago_webhook),
 ]
