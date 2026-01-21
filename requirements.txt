@@ -26,3 +26,4 @@ python-dotenv
 
 whitenoise>=6.0
 
+pytz==2025.1
