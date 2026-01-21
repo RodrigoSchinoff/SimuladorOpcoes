@@ -1,77 +1,54 @@
 import json
-from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
+from django.http import JsonResponse, HttpResponse
+from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
-from .services.mercadopago_client import MercadoPagoClient
-from .models import Assinatura
 
 
 # =========================================
-# NÃO USADO NO FLUXO DE CHECKOUT HOSPEDADO
-# (mantido para compatibilidade)
+# CRIAR ASSINATURA (CHECKOUT HOSPEDADO)
 # =========================================
 @csrf_exempt
 def criar_assinatura(request):
     if request.method != "POST":
-        return HttpResponseBadRequest("Método inválido")
+        return JsonResponse({"error": "Método inválido"}, status=405)
 
     try:
-        body = json.loads(request.body)
-        codigo = body.get("codigo")  # ex: pro_mensal
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "JSON inválido"}, status=400)
 
-        assinatura = MercadoPagoClient.criar_assinatura(codigo)
+    codigo = data.get("codigo")
+    if not codigo:
+        return JsonResponse({"error": "Código do plano ausente"}, status=400)
 
-        Assinatura.objects.create(
-            codigo=codigo,
-            preapproval_id=assinatura.get("id"),
-            status=assinatura.get("status"),
-        )
+    PLANOS = {
+        "BASICO_MENSAL": settings.MP_PLAN_BASICO_MENSAL,
+        "BASICO_ANUAL": settings.MP_PLAN_BASICO_ANUAL,
+        "PRO_MENSAL": settings.MP_PLAN_PRO_MENSAL,
+        "PRO_ANUAL": settings.MP_PLAN_PRO_ANUAL,
+        "TESTE": settings.MP_PLAN_TESTE,
+    }
 
-        return JsonResponse({
-            "init_point": assinatura.get("init_point")
-        })
+    plan_id = PLANOS.get(codigo)
+    if not plan_id:
+        return JsonResponse({"error": "Plano inválido"}, status=400)
 
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    init_point = (
+        "https://www.mercadopago.com.br/subscriptions/checkout"
+        f"?preapproval_plan_id={plan_id}"
+    )
+
+    return JsonResponse({"init_point": init_point})
 
 
 # =========================================
-# WEBHOOK MERCADO PAGO (CHECKOUT HOSPEDADO)
+# WEBHOOK MERCADO PAGO
 # =========================================
 @csrf_exempt
 def webhook_mercadopago(request):
-    """
-    Recebe notificações de:
-    - Assinaturas
-    - Pagamentos recorrentes
-    """
     try:
         payload = json.loads(request.body or "{}")
         print("WEBHOOK MP:", payload)
-
-        # Estrutura típica do webhook
-        action = payload.get("action")          # ex: subscription_preapproval.updated
-        data = payload.get("data", {})
-        preapproval_id = data.get("id")
-
-        if not preapproval_id:
-            return HttpResponse(status=200)
-
-        # Busca a assinatura no MP para status real
-        mp_data = MercadoPagoClient.buscar_assinatura(preapproval_id)
-        status = mp_data.get("status")
-
-        # Atualiza ou cria no banco
-        assinatura, _ = Assinatura.objects.update_or_create(
-            preapproval_id=preapproval_id,
-            defaults={
-                "status": status,
-            }
-        )
-
-        # Aqui você decide o que fazer por status
-        if status == "authorized":
-            # TODO: liberar acesso ao usuário
-            pass
 
         return HttpResponse(status=200)
 

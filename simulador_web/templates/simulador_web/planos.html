@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -63,9 +64,7 @@ main p.lead{
   padding:32px;
 }
 
-.plan-top{
-  flex:1;
-}
+.plan-top{flex:1}
 
 .plan-card h3{font-size:26px;margin:0 0 10px}
 .plan-card p{color:#9ca3af;margin-bottom:16px}
@@ -79,9 +78,7 @@ main p.lead{
 .plan-card li{margin-bottom:8px}
 .plan-card li::before{content:"✔ ";color:#3b82f6;font-weight:700}
 
-.plan-actions{
-  margin-top:24px;
-}
+.plan-actions{margin-top:24px}
 
 .btn-primary{
   width:100%;
@@ -93,6 +90,17 @@ main p.lead{
   font-weight:800;
   cursor:pointer;
   margin-bottom:12px;
+}
+
+.btn-test{
+  background:linear-gradient(90deg,#f59e0b,#fbbf24);
+}
+
+.test-area{
+  margin-top:80px;
+  padding:32px;
+  border:1px dashed rgba(148,163,184,.3);
+  border-radius:18px;
 }
 
 footer{
@@ -107,6 +115,8 @@ footer{
 </head>
 
 <body>
+
+{% csrf_token %}
 
 <header>
   <h1>Algop</h1>
@@ -134,16 +144,12 @@ footer{
   </div>
 
   <div class="plan-actions">
-    <!-- Básico Mensal -->
-    <button class="btn-primary"
-      onclick="window.location.href='https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=41b26d5e66744d1d93ebfdde25a5323b'">
-      Básico Mensal — R$ 79/mês
+    <button class="btn-primary" onclick="assinarPlano('BASICO_MENSAL')">
+      Básico Mensal — R$ 79 / mês
     </button>
 
-    <!-- Básico Anual -->
-    <button class="btn-primary"
-      onclick="window.location.href='https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=f98e3b693a5e4300b168649242a0b702'">
-      Básico Anual — R$ 797/ano
+    <button class="btn-primary" onclick="assinarPlano('BASICO_ANUAL')">
+      Básico Anual — R$ 797 / ano
     </button>
   </div>
 </div>
@@ -164,21 +170,30 @@ footer{
   </div>
 
   <div class="plan-actions">
-    <!-- Pro Mensal -->
-    <button class="btn-primary"
-      onclick="window.location.href='https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=95fb5dcc54024ef3ba7ab90e59a3f644'">
-      Pro Mensal — R$ 185/mês
+    <button class="btn-primary" onclick="assinarPlano('PRO_MENSAL')">
+      Pro Mensal — R$ 185 / mês
     </button>
 
-    <!-- Pro Anual -->
-    <button class="btn-primary"
-      onclick="window.location.href='https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=041a2036e792400b929e9c1709fa2ba8'">
-      Pro Anual — R$ 1.850/ano
+    <button class="btn-primary" onclick="assinarPlano('PRO_ANUAL')">
+      Pro Anual — R$ 1.850 / ano
     </button>
   </div>
 </div>
 
 </div>
+
+<!-- ÁREA DE TESTE -->
+<div class="test-area">
+  <h3>Plano de Teste (temporário)</h3>
+  <p class="lead">
+    Apenas para validação de pagamento em produção.
+  </p>
+
+  <button class="btn-primary btn-test" onclick="assinarPlano('TESTE')">
+    Plano de Teste — R$ 1
+  </button>
+</div>
+
 </main>
 
 <footer>
@@ -187,53 +202,37 @@ O Algop não executa operações nem fornece recomendações de investimento.
 </footer>
 
 <script>
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+  return null;
+}
+
 function assinarPlano(codigo) {
-  console.log("Clique detectado:", codigo);
+  const csrfToken = getCookie("csrftoken");
 
   fetch("/payments/assinatura/criar/", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "X-CSRFToken": csrfToken
     },
     body: JSON.stringify({ codigo: codigo })
   })
-  .then(function(resp) {
-    console.log("Resposta backend recebida");
-    return resp.json();
-  })
-  .then(function(data) {
-    console.log("Dados:", data);
-
+  .then(resp => resp.json())
+  .then(data => {
     if (!data.init_point) {
       alert("Erro ao iniciar pagamento");
       return;
     }
-
-    var url = data.init_point;
-
-    // garante protocolo
-    if (url.indexOf("//") === 0) {
-      url = "https:" + url;
-    }
-
-    // força sandbox fora de produção
-    if (window.location.hostname !== "algop.com.br") {
-      var idx = url.indexOf("/subscriptions/");
-      if (idx !== -1) {
-        url = "https://sandbox.mercadopago.com.br" + url.substring(idx);
-      }
-    }
-
-    console.log("Redirecionando para:", url);
-    window.location.href = url;
+    window.location.href = data.init_point;
   })
-  .catch(function(err) {
-    console.error("Erro JS:", err);
+  .catch(() => {
     alert("Erro ao conectar com pagamento");
   });
 }
 </script>
-
 
 </body>
 </html>

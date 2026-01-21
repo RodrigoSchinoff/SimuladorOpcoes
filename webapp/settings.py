@@ -158,3 +158,18 @@ DEFAULT_FROM_EMAIL = os.getenv(
 SESSION_COOKIE_AGE = 60 * 60 * 2  # 2 horas
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+
+# =========================
+# Mercado Pago — Produção
+# =========================
+
+MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
+
+MP_PLAN_BASICO_MENSAL = os.getenv("MP_PLAN_BASICO_MENSAL")
+MP_PLAN_BASICO_ANUAL  = os.getenv("MP_PLAN_BASICO_ANUAL")
+MP_PLAN_PRO_MENSAL    = os.getenv("MP_PLAN_PRO_MENSAL")
+MP_PLAN_PRO_ANUAL     = os.getenv("MP_PLAN_PRO_ANUAL")
+
+# Plano de teste (temporário)
+MP_PLAN_TESTE         = os.getenv("MP_PLAN_TESTE")
