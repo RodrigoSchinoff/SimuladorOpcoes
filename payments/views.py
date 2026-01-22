@@ -1,12 +1,12 @@
 import json
-from django.http import JsonResponse, HttpResponse
+import requests
 from django.conf import settings
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
+MP_API_BASE = "https://api.mercadopago.com"
 
-# =========================================
-# CRIAR ASSINATURA (CHECKOUT HOSPEDADO)
-# =========================================
+
 @csrf_exempt
 def criar_assinatura(request):
     if request.method != "POST":
@@ -33,25 +33,28 @@ def criar_assinatura(request):
     if not plan_id:
         return JsonResponse({"error": "Plano inválido"}, status=400)
 
-    init_point = (
-        "https://www.mercadopago.com.br/subscriptions/checkout"
-        f"?preapproval_plan_id={plan_id}"
+    headers = {
+        "Authorization": f"Bearer {settings.MP_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    resp = requests.get(
+        f"{MP_API_BASE}/preapproval_plan/{plan_id}",
+        headers=headers,
+        timeout=15,
     )
+
+    resp.raise_for_status()
+    data = resp.json()
+
+    init_point = data.get("init_point")
+    if not init_point:
+        return JsonResponse({"error": "init_point não retornado pelo MP"}, status=500)
 
     return JsonResponse({"init_point": init_point})
 
 
-# =========================================
-# WEBHOOK MERCADO PAGO
-# =========================================
 @csrf_exempt
 def webhook_mercadopago(request):
-    try:
-        payload = json.loads(request.body or "{}")
-        print("WEBHOOK MP:", payload)
-
-        return HttpResponse(status=200)
-
-    except Exception as e:
-        print("WEBHOOK ERROR:", e)
-        return HttpResponse(status=200)
+    # placeholder — será implementado depois
+    return HttpResponse(status=200)
