@@ -173,3 +173,16 @@ MP_PLAN_PRO_ANUAL     = os.getenv("MP_PLAN_PRO_ANUAL")
 
 # Plano de teste (temporário)
 MP_PLAN_TESTE         = os.getenv("MP_PLAN_TESTE")
+
+import logging
+logger = logging.getLogger("django")
+
+if MP_ACCESS_TOKEN:
+    logger.warning(
+        "MP_ACCESS_TOKEN loaded | prefix=%s | length=%s",
+        MP_ACCESS_TOKEN.split("-")[0],
+        len(MP_ACCESS_TOKEN),
+    )
+else:
+    logger.error("MP_ACCESS_TOKEN is EMPTY at runtime")
+
