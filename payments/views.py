@@ -51,10 +51,12 @@ def criar_assinatura(request):
     if not init_point:
         return JsonResponse({"error": "init_point não retornado pelo MP"}, status=500)
 
+    # >>> LOG CRÍTICO (ANTES DO RETURN) <<<
+    print("MP INIT_POINT:", init_point)
+
     return JsonResponse({"init_point": init_point})
 
 
 @csrf_exempt
 def webhook_mercadopago(request):
-    # placeholder — será implementado depois
     return HttpResponse(status=200)
